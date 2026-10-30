@@ -4,6 +4,8 @@
 
 If you run several Claude Code sessions in different Terminal tabs, it is easy to lose track of the one quietly waiting for an answer. This panel sits in the corner of your screen, lists each session by its chat title, and pulses the ones that are waiting on you. Click a card to jump straight to that tab.
 
+Each Claude tab also gets its own background colour, and its card in the panel matches. Pick from four colour schemes.
+
 <p align="center">
   <img src="docs/panel.png" alt="The widget panel listing five Claude Code sessions. Two are outlined and pulsing: one waiting for permission and one waiting for input. The others are watching a background job, working, and idle." width="354">
 </p>
@@ -16,6 +18,7 @@ If you run several Claude Code sessions in different Terminal tabs, it is easy t
 - [Requirements](#requirements)
 - [Install](#install)
 - [Using the panel](#using-the-panel)
+- [Tab colours](#tab-colours)
 - [Commands](#commands)
 - [How it works](#how-it-works)
 - [Configuration](#configuration)
@@ -98,6 +101,61 @@ Only one panel ever runs, however many sessions you open.
 
 ---
 
+## Tab colours
+
+Every Terminal tab running Claude Code gets its own background colour when the session starts. No two open tabs share a colour, and each card in the panel matches its tab. When the session ends, the tab goes back to its original background.
+
+<p align="center">
+  <img src="docs/schemes.png" alt="Four copies of the panel side by side, one per colour scheme: muted, jewel, pastel and colourblind. Each shows four cards in that scheme's colours." width="100%">
+</p>
+<p align="center"><sub>From left to right: muted, jewel, pastel, colourblind.</sub></p>
+
+### Colour schemes
+
+| Scheme | Looks like | Best for |
+| --- | --- | --- |
+| **auto** | muted on dark profiles, pastel on light ones | Everyone. This is the default. |
+| **muted** | 15 dark, quiet backgrounds | Dark Terminal profiles |
+| **jewel** | 12 deeper, more saturated darks | Telling many tabs apart at a glance |
+| **pastel** | 12 soft light backgrounds | Light Terminal profiles with dark text |
+| **colourblind** | 8 dark shades of the [Okabe-Ito palette](https://jfly.uni-koeln.de/color/) | Red-green and other colour vision differences |
+
+Switch schemes with:
+
+```text
+/session-widget:tint scheme jewel
+```
+
+This saves your choice and recolours every open Claude tab straight away. Run `/session-widget:tint scheme` with no name to see which one is active.
+
+**Pastel on a dark profile looks wrong.** Pastel backgrounds need dark text. Use `auto` unless your profile matches the scheme.
+
+### Recolouring one tab
+
+| Command | What it does |
+| --- | --- |
+| `/session-widget:tint` | Give this tab a different random colour. |
+| `/session-widget:tint set <colour>` | Give this tab a named colour, such as `set sapphire`. |
+| `/session-widget:tint list` | Show the current scheme's colours and which tab has each. |
+| `/session-widget:tint reset` | Put this tab back to its original background. |
+| `/session-widget:tint all` | Colour every Claude tab that is not coloured yet. |
+
+The panel picks up a new colour within half a second.
+
+### Turning tab colours off
+
+Set this in the environment Claude Code starts from, for example in `~/.zshrc`:
+
+```bash
+export CLAUDE_WIDGET_TINT=off
+```
+
+New sessions then leave tab backgrounds alone, and their cards are grey. The `/session-widget:tint` command still works if you want a colour on one tab.
+
+Tab colours only work in Apple's Terminal app. Other terminals are left untouched.
+
+---
+
 ## Commands
 
 Run these inside any Claude Code session:
@@ -114,18 +172,20 @@ Run these inside any Claude Code session:
 
 ## How it works
 
-There are two small Python programs and no background service.
+There are three small Python programs and no background service.
 
 ```text
- Claude Code session ──hook events──▶ session-state.py ──writes──▶ ~/.claude/widget/sessions/<id>.json
+ Claude Code session ──hook events──▶ tint.py ──colours──▶ the Terminal tab
+                     ──hook events──▶ session-state.py ──writes──▶ ~/.claude/widget/sessions/<id>.json
                                                                                  │
                          macOS banner ◀── widget.py (the panel) ◀──reads twice a second
 ```
 
-1. **Claude Code runs `session-state.py` on its hook events.** These are session start and end, each prompt you send, each finished turn, permission requests, and a few tool calls.
-2. **The hook writes one small status file per session.**
-3. **`widget.py` reads those files twice a second** and redraws the panel when anything changes.
-4. **When a session starts needing you**, the panel posts a macOS banner and reappears if it was hidden.
+1. **When a session starts, `tint.py` colours its Terminal tab**, and puts the original colour back when it ends.
+2. **Claude Code runs `session-state.py` on its hook events.** These are session start and end, each prompt you send, each finished turn, permission requests, and a few tool calls.
+3. **The hook writes one small status file per session.**
+4. **`widget.py` reads those files twice a second** and redraws the panel when anything changes.
+5. **When a session starts needing you**, the panel posts a macOS banner and reappears if it was hidden.
 
 A few details:
 
@@ -147,18 +207,24 @@ Status files, logs and the panel position live in `~/.claude/widget/`. To use an
 export CLAUDE_WIDGET_HOME="$HOME/.local/state/claude-widget"
 ```
 
-### Card colours
+### Environment variables
 
-Cards are grey unless a colour file exists for that session's Terminal tab. Each file sits in `~/.claude/tint-state/` and is named after the tab's device, with `/` replaced by `_`. For example, `_dev_ttys003.json`:
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `CLAUDE_WIDGET_HOME` | `~/.claude/widget` | Where status files, logs and the panel position live. |
+| `CLAUDE_WIDGET_TINT` | on | Set to `off` to stop new sessions colouring their tab. |
+
+### Where tab colours are stored
+
+Tab colours live in `~/.claude/tint-state/`, one file per tab, plus `scheme.json` for your chosen scheme. Each tab file is named after the tab's device, with `/` replaced by `_`. For example, `_dev_ttys003.json`:
 
 ```json
-{ "tint": "1e3a5f", "name": "navy" }
+{ "orig": "000000", "tint": "0d2547", "name": "sapphire" }
 ```
 
-- **`tint`** is the tab's background colour as six hex digits.
-- **`name`** is a word shown on idle cards, such as "navy tab".
-
-Find a tab's device by running `tty` in it. The panel brightens the colour for the card outline, so dark tab colours work well.
+- **`orig`** is the tab's own background, restored when the session ends.
+- **`tint`** is the colour in use, as six hex digits.
+- **`name`** is shown on idle cards, such as "sapphire tab".
 
 ---
 
@@ -182,6 +248,23 @@ cat ~/.claude/widget/hooks.log    # the hook script
 
 - Click-to-jump only works in Apple's Terminal app.
 - Allow Python to control Terminal under **System Settings → Privacy & Security → Automation**.
+
+**Tabs are not coloured.**
+
+- Colours only apply in Apple's Terminal app.
+- Check that `CLAUDE_WIDGET_TINT` is not set to `off`.
+- Allow Python to control Terminal under **System Settings → Privacy & Security → Automation**.
+
+**The commands print nothing, or say AppleScript is blocked.**
+
+- This happens if you turned on Claude Code's sandbox. The slash commands run inside it, and the sandbox blocks AppleScript and writes to `~/.claude`.
+- Run the script yourself in a normal terminal instead, or exclude it from the sandbox in your Claude Code settings:
+
+```bash
+python3 ~/.claude/plugins/cache/session-widget/session-widget/*/scripts/tint.py list
+```
+
+- The hooks are not affected, so the panel and automatic colours still work.
 
 **No banners appear.**
 
@@ -210,6 +293,7 @@ Update to the newest version:
 Uninstall:
 
 ```text
+/session-widget:tint reset
 /session-widget:widget quit
 /plugin uninstall session-widget@session-widget
 /plugin marketplace remove session-widget
@@ -218,7 +302,7 @@ Uninstall:
 Then delete the state folder if you like:
 
 ```bash
-rm -rf ~/.claude/widget
+rm -rf ~/.claude/widget ~/.claude/tint-state
 ```
 
 ---
@@ -229,6 +313,7 @@ Everything stays on your Mac.
 
 - **No network access.** The widget never sends anything anywhere.
 - **What it reads:** Claude Code's list of running sessions, and the end of each session's transcript to find its title and what it is waiting on.
+- **What it changes:** the background colour of Terminal tabs running Claude Code, put back when each session ends.
 - **What it stores:** the first sixty characters of your latest prompt in each session, in the state folder. Each file is deleted when its session ends.
 
 ---
@@ -242,13 +327,16 @@ Everything stays on your Mac.
   plugin.json         the plugin manifest
   marketplace.json    lets this repository act as its own plugin source
 hooks/hooks.json      which Claude Code events run the hook script
-commands/widget.md    the /session-widget:widget command
+commands/
+  widget.md           the /session-widget:widget command
+  tint.md             the /session-widget:tint command
 scripts/
   session-state.py    the hook script, plus the command line behind /widget
+  tint.py             tab colours: the schemes, the hook and the /tint command
   widget.py           the Tkinter panel
   widgetlib.py        shared helpers, with no Tkinter, so they are easy to test
-tests/                pytest suite for the hook and the helpers
-docs/panel.png        the screenshot above
+tests/                pytest suite for the hook, the helpers and the tab colours
+docs/                 the screenshots in this README
 ```
 
 ### Run the tests

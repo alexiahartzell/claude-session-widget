@@ -83,6 +83,25 @@ def test_read_tint_missing(tmp_path):
     assert w.read_tint(str(tmp_path), "/dev/ttys001") == (w.GREY, "grey")
 
 
+def test_refresh_tints_follows_tab_colour_changes(tmp_path):
+    sessions, tint = str(tmp_path / "sessions"), tmp_path / "tint"
+    tint.mkdir()
+    w.write_session(sessions, {"session_id": "s1", "tty": "/dev/ttys008", "color": w.GREY,
+                               "color_name": "grey", "updated": 100.0})
+    (tint / "_dev_ttys008.json").write_text(json.dumps({"tint": "1e1026", "name": "plum"}))
+    w.refresh_tints(sessions, str(tint))
+    s = w.load_session(sessions, "s1")
+    assert (s["color"], s["color_name"]) == ("1e1026", "plum")
+    assert s["updated"] == 100.0          # a colour change is not session activity
+
+
+def test_card_fill_keeps_light_text_readable():
+    # A dark tint fills the card as is; a pastel tint must give a dark card.
+    for tint in ("1e1026", "efe6fb", "fbf3d5"):
+        fill = w.card_fill(tint, "15171e")
+        assert not w.is_light(fill), tint
+
+
 def test_brighten_keeps_hue_and_is_vivid():
     # plum 1e1026 is dark purple: blue > red > green. The swatch colour must
     # keep that ordering and be bright and saturated enough to tell apart.
@@ -99,6 +118,9 @@ def test_brighten_keeps_hue_and_is_vivid():
     rg, gg, bg = (int(w.brighten(w.GREY)[i:i + 2], 16) for i in (0, 2, 4))
     assert abs(rg - gg) <= 12 and abs(gg - bg) <= 12 and rg >= 120
     assert w.brighten("ffffff") == "ffffff"
+    # pastel mint e2f4e8 has little saturation but a clear green hue: keep it
+    r3, g3, b3 = (int(w.brighten("e2f4e8")[i:i + 2], 16) for i in (0, 2, 4))
+    assert g3 > r3 and g3 > b3 and max(r3, g3, b3) - min(r3, g3, b3) >= 80
 
 
 def test_is_alive():

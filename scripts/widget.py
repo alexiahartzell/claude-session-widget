@@ -209,6 +209,7 @@ class Widget:
             for s in w.mirror_claude_sessions(w.CLAUDE_SESSIONS_DIR, w.SESSIONS_DIR):
                 w.notify_mac(*w.attention_message(s))
             w.refresh_titles(w.SESSIONS_DIR)
+            w.refresh_tints(w.SESSIONS_DIR)
             sessions = w.cleanup(w.SESSIONS_DIR)
             self.handle_attention(sessions)
             self.handle_empty(sessions)
@@ -300,7 +301,7 @@ class Widget:
         text_x, text_w = x1 + 18, (x2 - 92) - (x1 + 18)
         lines = self.title_lines(w.display_label(s), text_w)
         h = CARD_H + LINE_H * (len(lines) - 1)
-        card_fill = mix(tint, PANEL_BG, 0.25)
+        card_fill = "#" + w.card_fill(s.get("color") or w.GREY, PANEL_BG[1:])
         glow = rounded(c, x1 - 2, y - 2, x2 + 2, y + h + 2, RADIUS + 2,
                        fill="", outline=vivid if attention else "", width=3, tags=(tag,))
         rounded(c, x1, y, x2, y + h, RADIUS, fill=card_fill, outline="", tags=(tag,))

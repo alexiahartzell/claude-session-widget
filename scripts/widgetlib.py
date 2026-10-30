@@ -125,18 +125,49 @@ def read_tint(tint_dir, tty):
     return data["tint"], data.get("name", "tint")
 
 
+def refresh_tints(sessions_dir, tint_dir=None):
+    """Pick up tab colour changes, such as /tint shuffle, without waiting for a hook."""
+    tint_dir = tint_dir or TINT_DIR
+    for s in load_sessions(sessions_dir):
+        color, name = read_tint(tint_dir, s.get("tty"))
+        if (color, name) != (s.get("color"), s.get("color_name")):
+            update_session_fn(sessions_dir, s["session_id"],
+                              lambda cur: {"color": color, "color_name": name}, touch=False)
+
+
 def brighten(h, value=0.82, min_sat=0.55):
     """Lift a dark muted tab tint to a vivid swatch colour with the same hue."""
     import colorsys
     r, g, b = (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
     hue, sat, val = colorsys.rgb_to_hsv(r, g, b)
-    if val >= 0.95 and sat < 0.05:
-        return h                                   # already light, leave it
-    if sat < 0.08:
+    if sat < 0.03:                                 # no hue to amplify
+        if val >= 0.95:
+            return h                               # already light, leave it
         return "".join(f"{int(max(val, 0.5) * 255):02x}" for _ in range(3))
     sat = max(sat, min_sat)
     val = max(val, value)
     return "".join(f"{int(round(c * 255)):02x}" for c in colorsys.hsv_to_rgb(hue, sat, val))
+
+
+def _mix(a, b, t):
+    """Blend two 'rrggbb' colours; t=0 gives a, t=1 gives b."""
+    pa = [int(a[i:i + 2], 16) for i in (0, 2, 4)]
+    pb = [int(b[i:i + 2], 16) for i in (0, 2, 4)]
+    return "".join(f"{int(round(x + (y - x) * t)):02x}" for x, y in zip(pa, pb))
+
+
+def is_light(h):
+    """True when a hex colour is light enough to need dark text."""
+    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    return 0.299 * r + 0.587 * g + 0.114 * b > 140
+
+
+def card_fill(tint, panel_bg):
+    """Card background for a tab tint. Light pastel tints become a dark wash of
+    their vivid colour, so the panel's light text stays readable."""
+    if is_light(tint):
+        return _mix(brighten(tint), panel_bg, 0.78)
+    return _mix(tint, panel_bg, 0.25)
 
 
 def _ps(pid, fields):

@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import widgetlib as w
 
 LOG = os.path.join(w.WIDGET_DIR, "hooks.log")
-USAGE = "usage: /widget [show | hide | quit | name <text>]"
+USAGE = "usage: /session-widget:widget [show | hide | quit | name <text>]"
 
 def armed_by(payload):
     """What a PostToolUse event leaves Claude waiting on, or None."""
