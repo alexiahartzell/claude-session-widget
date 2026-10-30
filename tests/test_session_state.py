@@ -29,9 +29,9 @@ def make_tint(tmp_path):
 def test_session_start_creates_file_and_launches(tmp_path):
     make_tint(tmp_path)
     new, calls = run(tmp_path, {"hook_event_name": "SessionStart", "session_id": "s1",
-                                "cwd": "/Users/alexia/pdi-tmd-neaton"})
+                                "cwd": "/Users/me/spectra"})
     assert new["status"] == "idle"
-    assert new["label"] == "pdi-tmd-neaton"
+    assert new["label"] == "spectra"
     assert new["color"] == "1e1026" and new["color_name"] == "plum"
     assert new["pid"] == 4242 and new["tty"] == "/dev/ttys008"
     assert new["task"] == ""

@@ -160,7 +160,7 @@ def test_load_sessions_ignores_foreign_json(tmp_path):
 # ---- mirroring Claude Code's own session records (for sessions that
 # started before the hooks were installed, or have not fired a hook yet) ----
 
-def _claude_record(d, pid, sid, status, cwd="/Users/alexia/miskatonic"):
+def _claude_record(d, pid, sid, status, cwd="/Users/me/dynamics"):
     d.mkdir(exist_ok=True)
     (d / f"{pid}.json").write_text(json.dumps(
         {"pid": pid, "sessionId": sid, "cwd": cwd, "status": status, "name": "x"}))
@@ -180,7 +180,7 @@ def test_mirror_seeds_missing_sessions_with_colour(tmp_path):
     a, b = w.load_session(se, "sid-a"), w.load_session(se, "sid-b")
     assert a["status"] == "working" and a["source"] == "mirror"
     assert a["color"] == "0c1f16" and a["color_name"] == "forest" and a["tty"] == "/dev/ttys003"
-    assert a["label"] == "miskatonic" and a["pid"] == 3989
+    assert a["label"] == "dynamics" and a["pid"] == 3989
     assert b["status"] == "idle" and b["color"] == w.GREY     # idle at seed time: plain, no pulse
     assert w.load_session(se, "sid-dead") is None
     assert new_attention == []
@@ -373,7 +373,7 @@ def test_armed_in_transcript_only_reads_the_tail(tmp_path):
 
 
 def test_find_transcript(tmp_path):
-    proj = tmp_path / "projects" / "-Users-alexia-miskatonic"
+    proj = tmp_path / "projects" / "-Users-me-dynamics"
     proj.mkdir(parents=True)
     (proj / "sid-a.jsonl").write_text("")
     assert w.find_transcript("sid-a", str(tmp_path / "projects")) == str(proj / "sid-a.jsonl")
@@ -415,9 +415,9 @@ def test_title_in_transcript_returns_latest_ai_title(tmp_path):
     f = tmp_path / "s.jsonl"
     f.write_text(_jl({"type": "ai-title", "aiTitle": "Old title", "sessionId": "s"},
                      _user("go"), _assistant({"type": "text", "text": "ok"}),
-                     {"type": "ai-title", "aiTitle": "A4-spectroscopy tasks", "sessionId": "s"},
+                     {"type": "ai-title", "aiTitle": "Spectroscopy tasks", "sessionId": "s"},
                      {"type": "last-prompt", "lastPrompt": "x"}))
-    assert w.title_in_transcript(str(f)) == "A4-spectroscopy tasks"
+    assert w.title_in_transcript(str(f)) == "Spectroscopy tasks"
 
 
 def test_title_in_transcript_searches_back_through_a_long_file(tmp_path):
@@ -435,9 +435,9 @@ def test_title_in_transcript_missing_or_untitled(tmp_path):
 
 
 def test_display_label_prefers_override_then_title_then_folder():
-    assert w.display_label({"label": "miskatonic", "title": "A4-spectroscopy tasks"}) == "A4-spectroscopy tasks"
-    assert w.display_label({"label": "miskatonic", "title": "A4", "label_override": "paper"}) == "paper"
-    assert w.display_label({"label": "miskatonic", "title": ""}) == "miskatonic"
+    assert w.display_label({"label": "dynamics", "title": "Spectroscopy tasks"}) == "Spectroscopy tasks"
+    assert w.display_label({"label": "dynamics", "title": "Spectra", "label_override": "paper"}) == "paper"
+    assert w.display_label({"label": "dynamics", "title": ""}) == "dynamics"
 
 
 def test_refresh_titles_updates_only_when_transcript_changed(tmp_path):

@@ -1,5 +1,10 @@
 {
   "name": "session-widget",
   "version": "1.0.0",
-  "description": "Always-on-top macOS panel listing your live Claude Code sessions. Pulses when one needs you. Click a card to jump to its Terminal tab."
+  "description": "Always-on-top macOS panel listing your live Claude Code sessions. Pulses when one needs you. Click a card to jump to its Terminal tab.",
+  "author": { "name": "Alexia Hartzell", "url": "https://github.com/alexiahartzell" },
+  "homepage": "https://github.com/alexiahartzell/claude-session-widget",
+  "repository": "https://github.com/alexiahartzell/claude-session-widget",
+  "license": "MIT",
+  "keywords": ["macos", "terminal", "sessions", "notifications", "widget"]
 }
