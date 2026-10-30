@@ -95,11 +95,14 @@ def test_refresh_tints_follows_tab_colour_changes(tmp_path):
     assert s["updated"] == 100.0          # a colour change is not session activity
 
 
-def test_card_fill_keeps_light_text_readable():
-    # A dark tint fills the card as is; a pastel tint must give a dark card.
-    for tint in ("1e1026", "efe6fb", "fbf3d5"):
-        fill = w.card_fill(tint, "15171e")
-        assert not w.is_light(fill), tint
+def test_cards_stay_readable_in_both_panel_modes():
+    # Dark panel: light text, so every card must be dark, whatever the tab tint.
+    # Light panel: dark text, so every card must be light and its accent dark.
+    dark_bg, light_bg = w.PANEL_THEMES["dark"]["bg"], w.PANEL_THEMES["light"]["bg"]
+    for tint in ("1e1026", "0c1f16", "efe6fb", "fbf3d5", w.GREY):
+        assert not w.is_light(w.card_fill(tint, dark_bg, "dark")), tint
+        assert w.is_light(w.card_fill(tint, light_bg, "light")), tint
+        assert not w.is_light(w.accent(tint, "light")), tint
 
 
 def test_brighten_keeps_hue_and_is_vivid():

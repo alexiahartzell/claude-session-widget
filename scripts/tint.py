@@ -2,83 +2,88 @@
 """Tint Terminal.app tabs a distinct colour per Claude Code session.
 
 Hook use (stdin JSON from Claude Code):
-  SessionStart -> pick a palette colour no other open tab uses, apply it.
-  SessionEnd   -> restore the tab's original background.
+  SessionStart -> pick a colour no other open tab uses, apply it.
+  SessionEnd   -> restore the tab's original background and text colour.
   Set CLAUDE_WIDGET_TINT=off to turn the hook off.
 
 Manual use (the /tint command):
+  tint.py              give this tab a different random free colour
+  tint.py set NAME     give this tab a named colour
+  tint.py reset        restore this tab's original colours
+  tint.py list         show the current colours and which tab has what
   tint.py all          tint every tab that has a running claude
-  tint.py shuffle      give this tab a different random free colour
-  tint.py set NAME     give this tab a named palette colour
-  tint.py reset        restore this tab's original background
-  tint.py list         show the palette and which tab has what
-  tint.py scheme NAME  switch colour scheme (auto, muted, jewel, pastel, colourblind)
+  tint.py scheme NAME  switch scheme: muted, jewel, dusk, ocean, colourblind
+  tint.py mode MODE    switch mode: auto (follow macOS), dark, light
 Only acts inside Apple Terminal.
 """
 import json, os, random, subprocess, sys
 
-STATE_DIR = os.path.expanduser("~/.claude/tint-state")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import widgetlib as w
 
-# Colour schemes: (name, hex) backgrounds for Terminal tabs. Every hex is unique
-# across schemes, so a tab's colour alone says it was tinted by this script.
-SCHEMES = {
-    # Dark, muted backgrounds that keep light text readable.
+STATE_DIR = w.TINT_DIR
+
+# Each scheme lists its dark tab backgrounds as (name, hex). The light mode of a
+# scheme uses the same hues as soft light backgrounds, made by light_of().
+DARK = {
+    # Dark, quiet backgrounds.
     "muted": [
         ("midnight", "0d1b2a"), ("plum", "1e1026"), ("forest", "0c1f16"), ("wine", "26101a"),
         ("teal", "0c2224"), ("espresso", "211810"), ("indigo", "14132b"), ("moss", "1a200e"),
         ("slate", "171c24"), ("rust", "261410"), ("mulberry", "2a1428"), ("olive", "1f2010"),
         ("cobalt", "0f1a36"), ("sea", "0e2a20"), ("cocoa", "2a1e1a"),
     ],
-    # Deeper, more saturated darks that are easier to tell apart at a glance.
+    # Deeper, more saturated colours that are easy to tell apart.
     "jewel": [
         ("sapphire", "0d2547"), ("emerald", "0a2e22"), ("ruby", "3a0d1e"), ("amethyst", "1f0f3d"),
         ("amber", "3a2805"), ("turquoise", "05302f"), ("garnet", "330a12"), ("jade", "12300a"),
         ("violet", "2d0a3a"), ("copper", "3a1a05"), ("lapis", "0a1a40"), ("magenta", "3a0a2e"),
     ],
-    # Light backgrounds for light Terminal profiles with dark text.
-    "pastel": [
-        ("lavender", "efe6fb"), ("mint", "e2f4e8"), ("rose", "fbe4e6"), ("sky", "e1eefa"),
-        ("butter", "fbf3d5"), ("sand", "f1e7dc"), ("aqua", "ddf3f1"), ("blush", "f8e3f0"),
-        ("sage", "e9eedf"), ("periwinkle", "e6e6fa"), ("peach", "fdeadb"), ("ice", "e4f1f5"),
+    # Twilight purples, roses and evening blues.
+    "dusk": [
+        ("twilight", "1a1a3e"), ("orchid", "301838"), ("rosewood", "3a1a2a"), ("lagoon", "0f2c38"),
+        ("heather", "2a2040"), ("evening", "1e2442"), ("mauve", "38203a"), ("harbour", "142a40"),
+        ("aubergine", "281430"), ("cerise", "3c142c"),
     ],
-    # Dark versions of the Okabe-Ito palette, chosen to stay distinct with colour blindness.
+    # Sea blues, teals and greens.
+    "ocean": [
+        ("abyss", "0a1c30"), ("shallows", "063030"), ("reef", "0b2a3c"), ("kelp", "0e2c22"),
+        ("deep", "15243c"), ("tide", "0a2a33"), ("pearl", "1f2a38"), ("seaglass", "123228"),
+        ("storm", "1a2030"), ("current", "082638"),
+    ],
+    # Six hues picked by simulating protanopia, deuteranopia and tritanopia, so
+    # every pair of card colours stays clearly different for each.
     "colourblind": [
-        ("orange", "3a2800"), ("skyblue", "162d3b"), ("bluegreen", "00281d"), ("yellow", "353210"),
-        ("blue", "001d2d"), ("vermillion", "361800"), ("reddishpurple", "33202a"), ("grey", "262626"),
+        ("copper", "3d2c1e"), ("brass", "3d3d1e"), ("jade", "1e3d30"), ("harbour", "1e2e3d"),
+        ("indigo", "211e3d"), ("raspberry", "3d1e2d"),
     ],
 }
-DEFAULT_SCHEME = "auto"              # muted on dark profiles, pastel on light ones
-NAMES = {h: n for pal in SCHEMES.values() for n, h in pal}
-CONFIG_PATH = os.path.join(STATE_DIR, "scheme.json")
+SCHEMES = DARK
+TEXT = {"dark": "e8e6ee", "light": "1f2329"}     # tab text colour in each mode
 
 
-def is_light(h):
-    """True when a hex colour is light enough to need dark text."""
-    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
-    return 0.299 * r + 0.587 * g + 0.114 * b > 140
+def light_of(h):
+    """The light-mode background for a dark scheme colour: the same hue and
+    saturation with the lightness mirrored, so a darker tab becomes a paler one
+    and colours that differ in the dark version still differ in the light one."""
+    import colorsys
+    hue, light, sat = colorsys.rgb_to_hls(*(int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)))
+    r, g, b = colorsys.hls_to_rgb(hue, 1 - 0.55 * light, min(sat, 0.75))
+    return "".join(f"{int(round(c * 255)):02x}" for c in (r, g, b))
 
 
-def load_scheme():
-    try:
-        with open(CONFIG_PATH) as f:
-            name = json.load(f).get("scheme")
-        return name if name in SCHEMES or name == "auto" else DEFAULT_SCHEME
-    except Exception:
-        return DEFAULT_SCHEME
+def palette(scheme, mode):
+    """(name, hex) backgrounds for a scheme in 'dark' or 'light' mode."""
+    pal = DARK[scheme]
+    return pal if mode == "dark" else [(n, light_of(h)) for n, h in pal]
 
 
-def save_scheme(name):
-    os.makedirs(STATE_DIR, exist_ok=True)
-    with open(CONFIG_PATH, "w") as f:
-        json.dump({"scheme": name}, f)
+NAMES = {h: n for s in DARK for m in ("dark", "light") for n, h in palette(s, m)}
 
 
-def palette_for(orig, scheme=None):
-    """The (name, hex) list to use on a tab whose own background is orig."""
-    scheme = scheme or load_scheme()
-    if scheme == "auto":
-        scheme = "pastel" if is_light(orig) else "muted"
-    return SCHEMES[scheme]
+def current_palette(cfg=None):
+    cfg = cfg or w.load_config()
+    return palette(cfg["scheme"], w.effective_mode(cfg))
 
 
 def hex_to_as(h):
@@ -154,12 +159,36 @@ end tell''')
             tabs[parts[0]] = as_to_hex(*(int(x) for x in parts[1:]))
     return tabs
 
-def set_bg(tty, h):
+def text_of(tty):
+    """The tab's current normal text colour as hex, or None."""
+    out = osa(f'''tell application "Terminal"
+repeat with w in windows
+repeat with t in tabs of w
+if tty of t is "{tty}" then
+set c to normal text color of t
+return "" & (item 1 of c) & "|" & (item 2 of c) & "|" & (item 3 of c)
+end if
+end repeat
+end repeat
+return ""
+end tell''')
+    parts = out.split("|")
+    return as_to_hex(*(int(x) for x in parts)) if len(parts) == 3 else None
+
+def set_bg(tty, h, text=None):
+    """Set the tab background, and its normal and bold text colour when text is given."""
     r, g, b = hex_to_as(h)
+    sets = f"set background color of t to {{{r}, {g}, {b}}}"
+    if text:
+        tr, tg, tb = hex_to_as(text)
+        sets += (f"\nset normal text color of t to {{{tr}, {tg}, {tb}}}"
+                 f"\nset bold text color of t to {{{tr}, {tg}, {tb}}}")
     osa(f'''tell application "Terminal"
 repeat with w in windows
 repeat with t in tabs of w
-if tty of t is "{tty}" then set background color of t to {{{r}, {g}, {b}}}
+if tty of t is "{tty}" then
+{sets}
+end if
 end repeat
 end repeat
 end tell''')
@@ -174,25 +203,28 @@ def load_state(tty):
     except Exception:
         return None
 
-def save_state(tty, orig, tint, session_id=None):
+def save_state(tty, orig, orig_text, tint, session_id=None):
     os.makedirs(STATE_DIR, exist_ok=True)
     with open(state_path(tty), "w") as f:
-        json.dump({"orig": orig, "tint": tint, "name": NAMES[tint],
+        json.dump({"orig": orig, "orig_text": orig_text, "tint": tint, "name": NAMES[tint],
                    "session_id": session_id}, f)
 
 def orig_of(tty, tabs):
-    """The tab's own background from before any tint."""
+    """The tab's own (background, text colour) from before any tint."""
     st = load_state(tty)
-    return st["orig"] if st else (tabs[tty] if tabs[tty] not in NAMES else "000000")
+    if st:
+        return st["orig"], st.get("orig_text")
+    return (tabs[tty] if tabs[tty] not in NAMES else "000000"), text_of(tty)
 
 def apply(tty, tabs, choice, session_id=None):
-    save_state(tty, orig_of(tty, tabs), choice, session_id)
-    set_bg(tty, choice)
+    orig, orig_text = orig_of(tty, tabs)
+    save_state(tty, orig, orig_text, choice, session_id)
+    set_bg(tty, choice, TEXT["light" if w.is_light(choice) else "dark"])
     tabs[tty] = choice
     return NAMES[choice]
 
 def pick_free(tty, tabs, avoid=None, shuffle=False, palette=None):
-    palette = palette or palette_for(orig_of(tty, tabs))
+    palette = palette or current_palette()
     used = {h for t, h in tabs.items() if t != tty}
     free = [h for _, h in palette if h not in used and h != avoid]
     if free:
@@ -213,7 +245,17 @@ def restore(tty, tabs):
     orig = st["orig"] if st else "000000"
     if st:
         os.remove(state_path(tty))
-    set_bg(tty, orig)
+    set_bg(tty, orig, (st or {}).get("orig_text"))
+
+def recolour_all(tabs, cfg):
+    """Give every Claude tab a free colour from the chosen scheme and mode."""
+    pal = current_palette(cfg)
+    done = 0
+    for tty in sorted(claude_ttys()):
+        if tty in tabs:
+            apply(tty, tabs, pick_free(tty, tabs, palette=pal))
+            done += 1
+    return done
 
 def main(argv):
     if os.environ.get("TERM_PROGRAM") != "Apple_Terminal":
@@ -222,32 +264,26 @@ def main(argv):
     tabs = list_tabs()
 
     if action == "list":
-        scheme = load_scheme()
+        cfg = w.load_config()
         by_hex = {h: t for t, h in tabs.items()}
-        shown = SCHEMES if scheme == "auto" else {scheme: SCHEMES[scheme]}
-        print(f"scheme: {scheme}")
-        for sname, pal in shown.items():
-            if scheme == "auto" and sname not in ("muted", "pastel"):
-                continue
-            for n, h in pal:
-                print(f"{n:13s} #{h}  {by_hex.get(h, '')}")
+        print(f"scheme: {cfg['scheme']}, mode: {cfg['mode']} ({w.effective_mode(cfg)})")
+        for n, h in current_palette(cfg):
+            print(f"{n:11s} #{h}  {by_hex.get(h, '')}")
         return
 
-    if action == "scheme":
+    if action in ("scheme", "mode"):
+        choices = w.SCHEME_NAMES if action == "scheme" else w.MODES
         name = argv[1] if len(argv) > 1 else ""
+        cfg = w.load_config()
         if not name:
-            print(f"scheme: {load_scheme()}; choices: auto, " + ", ".join(SCHEMES))
+            print(f"{action}: {cfg[action]}; choices: " + ", ".join(choices))
             return
-        if name != "auto" and name not in SCHEMES:
-            print("unknown scheme; choices: auto, " + ", ".join(SCHEMES))
+        if name not in choices:
+            print(f"unknown {action}; choices: " + ", ".join(choices))
             return
-        save_scheme(name)
-        done = []
-        for tty in sorted(claude_ttys()):
-            if tty in tabs:
-                pal = palette_for(orig_of(tty, tabs), name)
-                done.append(apply(tty, tabs, pick_free(tty, tabs, palette=pal)))
-        print(f"scheme: {name}; recoloured {len(done)} tab(s)")
+        cfg = w.save_config(**{action: name})
+        n = recolour_all(tabs, cfg)
+        print(f"scheme: {cfg['scheme']}, mode: {cfg['mode']}; recoloured {n} tab(s)")
         return
 
     if action == "all":
@@ -284,10 +320,11 @@ def main(argv):
         print(apply(tty, tabs, pick_free(tty, tabs, avoid=tabs[tty], shuffle=True)))
     elif action == "set":
         name = argv[1] if len(argv) > 1 else ""
-        pal = palette_for(orig_of(tty, tabs))
+        pal = current_palette()
+        mode = w.effective_mode()
         hexes = dict(pal)
-        for p in SCHEMES.values():
-            for n, h in p:
+        for scheme in DARK:
+            for n, h in palette(scheme, mode):
                 hexes.setdefault(n, h)
         if name not in hexes:
             print("unknown colour; choices: " + ", ".join(n for n, _ in pal))

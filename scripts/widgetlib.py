@@ -162,12 +162,89 @@ def is_light(h):
     return 0.299 * r + 0.587 * g + 0.114 * b > 140
 
 
-def card_fill(tint, panel_bg):
-    """Card background for a tab tint. Light pastel tints become a dark wash of
-    their vivid colour, so the panel's light text stays readable."""
+# ---- colour scheme and light/dark mode, shared with tint.py ----
+
+CONFIG_PATH = os.path.join(TINT_DIR, "scheme.json")
+SCHEME_NAMES = ("muted", "jewel", "dusk", "ocean", "colourblind")
+MODES = ("auto", "dark", "light")
+
+# Panel colours per mode: background, outline, text, secondary text.
+PANEL_THEMES = {
+    "dark":  {"bg": "15171e", "outline": "2a2d3a", "fg": "f2f0f7", "dim": "9a9db0"},
+    "light": {"bg": "f6f5f9", "outline": "d9d7e2", "fg": "1d1f27", "dim": "6a6d7e"},
+}
+
+
+def load_config(path=None):
+    """{"scheme", "mode"} from the saved choice, with defaults for anything missing."""
+    data = _read_json(path or CONFIG_PATH) or {}
+    scheme, mode = data.get("scheme"), data.get("mode")
+    if scheme == "pastel":                         # pastel became the light mode of muted
+        scheme, mode = "muted", mode or "light"
+    return {"scheme": scheme if scheme in SCHEME_NAMES else "muted",
+            "mode": mode if mode in MODES else "auto"}
+
+
+def save_config(path=None, **fields):
+    path = path or CONFIG_PATH
+    cfg = dict(load_config(path), **fields)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(cfg, f)
+    return cfg
+
+
+_system_mode_cache = [0.0, "dark"]
+
+
+def system_mode(max_age=5.0):
+    """'dark' or 'light' from the macOS appearance setting, checked at most every few seconds."""
+    now = time.time()
+    if now - _system_mode_cache[0] > max_age:
+        try:
+            out = subprocess.run(["defaults", "read", "-g", "AppleInterfaceStyle"],
+                                 capture_output=True, text=True).stdout
+            _system_mode_cache[1] = "dark" if "Dark" in out else "light"
+        except Exception:
+            pass
+        _system_mode_cache[0] = now
+    return _system_mode_cache[1]
+
+
+def effective_mode(cfg=None):
+    mode = (cfg or load_config())["mode"]
+    return system_mode() if mode == "auto" else mode
+
+
+def _hsv(h):
+    import colorsys
+    return colorsys.rgb_to_hsv(*(int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)))
+
+
+def _hex(hue, sat, val):
+    import colorsys
+    return "".join(f"{int(round(c * 255)):02x}" for c in colorsys.hsv_to_rgb(hue, sat, val))
+
+
+def card_fill(tint, panel_bg, mode="dark"):
+    """Card background for a tab tint, readable with the panel's text in this mode."""
+    hue, sat, _ = _hsv(tint)
+    if mode == "light":
+        if sat < 0.03:
+            return _mix("e9e9ee", panel_bg, 0.3)
+        return _mix(_hex(hue, 0.16, 0.95), panel_bg, 0.2)
     if is_light(tint):
         return _mix(brighten(tint), panel_bg, 0.78)
     return _mix(tint, panel_bg, 0.25)
+
+
+def accent(tint, mode="dark"):
+    """Outline and status colour for a card: vivid on dark, deeper on light."""
+    vivid = brighten(tint)
+    if mode == "light":
+        hue, sat, _ = _hsv(vivid)
+        return _hex(hue, max(sat, 0.6), 0.62) if sat >= 0.03 else "707070"
+    return vivid
 
 
 def _ps(pid, fields):

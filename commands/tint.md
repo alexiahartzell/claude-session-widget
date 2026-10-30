@@ -1,6 +1,6 @@
 ---
-description: Recolour this Terminal tab, or list the colours in use
-argument-hint: shuffle | set <colour> | reset | list | all
+description: Recolour this Terminal tab, or switch colour scheme and light or dark mode
+argument-hint: set <colour> | reset | list | all | scheme <name> | mode auto|dark|light
 allowed-tools: Bash(python3 *tint.py*)
 ---
 

@@ -4,7 +4,7 @@
 
 If you run several Claude Code sessions in different Terminal tabs, it is easy to lose track of the one quietly waiting for an answer. This panel sits in the corner of your screen, lists each session by its chat title, and pulses the ones that are waiting on you. Click a card to jump straight to that tab.
 
-Each Claude tab also gets its own background colour, and its card in the panel matches. Pick from four colour schemes.
+Each Claude tab also gets its own background colour, and its card in the panel matches. Pick from five colour schemes, each in a light and a dark version.
 
 <p align="center">
   <img src="docs/panel.png" alt="The widget panel listing five Claude Code sessions. Two are outlined and pulsing: one waiting for permission and one waiting for input. The others are watching a background job, working, and idle." width="354">
@@ -103,32 +103,48 @@ Only one panel ever runs, however many sessions you open.
 
 ## Tab colours
 
-Every Terminal tab running Claude Code gets its own background colour when the session starts. No two open tabs share a colour, and each card in the panel matches its tab. When the session ends, the tab goes back to its original background.
+Every Terminal tab running Claude Code gets its own background colour when the session starts. No two open tabs share a colour, and each card in the panel matches its tab. When the session ends, the tab goes back to its original colours.
+
+There are five colour schemes, and each comes in a dark and a light version. Light mode also turns the tab's text dark and gives the panel a light background, so it works whatever your Terminal profile looks like.
 
 <p align="center">
-  <img src="docs/schemes.png" alt="Four copies of the panel side by side, one per colour scheme: muted, jewel, pastel and colourblind. Each shows four cards in that scheme's colours." width="100%">
+  <img src="docs/schemes.png" alt="Ten copies of the panel in two rows. The top row shows the dark version of each scheme: muted, jewel, dusk, ocean and colourblind. The bottom row shows the light version of the same five, with a light panel and pale cards." width="100%">
 </p>
-<p align="center"><sub>From left to right: muted, jewel, pastel, colourblind.</sub></p>
+<p align="center"><sub>Left to right: muted, jewel, dusk, ocean, colourblind. Top row dark, bottom row light.</sub></p>
 
 ### Colour schemes
 
-| Scheme | Looks like | Best for |
+| Scheme | Colours | Feel |
 | --- | --- | --- |
-| **auto** | muted on dark profiles, pastel on light ones | Everyone. This is the default. |
-| **muted** | 15 dark, quiet backgrounds | Dark Terminal profiles |
-| **jewel** | 12 deeper, more saturated darks | Telling many tabs apart at a glance |
-| **pastel** | 12 soft light backgrounds | Light Terminal profiles with dark text |
-| **colourblind** | 8 dark shades of the [Okabe-Ito palette](https://jfly.uni-koeln.de/color/) | Red-green and other colour vision differences |
+| **muted** | 15 | Quiet, low-saturation colours. The default. |
+| **jewel** | 12 | Richer sapphires, emeralds and rubies that are easy to tell apart. |
+| **dusk** | 10 | Twilight purples, roses and evening blues. |
+| **ocean** | 10 | Sea blues, teals and greens. |
+| **colourblind** | 6 | Copper, brass, jade, harbour blue, indigo and raspberry. |
 
-Switch schemes with:
+**The colourblind scheme was chosen by simulation.** Its six colours were picked so that every pair of cards stays clearly different under simulated protanopia, deuteranopia and tritanopia. A test in the suite checks this, so it stays true if the colours are ever edited.
+
+Switch scheme:
 
 ```text
-/session-widget:tint scheme jewel
+/session-widget:tint scheme dusk
 ```
 
-This saves your choice and recolours every open Claude tab straight away. Run `/session-widget:tint scheme` with no name to see which one is active.
+### Light and dark
 
-**Pastel on a dark profile looks wrong.** Pastel backgrounds need dark text. Use `auto` unless your profile matches the scheme.
+| Mode | What it does |
+| --- | --- |
+| **auto** | Follows your macOS appearance setting. The default. |
+| **dark** | Dark tab backgrounds with light text, and a dark panel. |
+| **light** | Pale tab backgrounds with dark text, and a light panel. |
+
+Switch mode:
+
+```text
+/session-widget:tint mode light
+```
+
+Both commands save your choice and recolour every open Claude tab straight away. Run either with no name to see what is active. In **auto**, the panel follows macOS within a few seconds. Open tabs keep their colour until you next switch, and new tabs use the current mode.
 
 ### Recolouring one tab
 
@@ -136,8 +152,8 @@ This saves your choice and recolours every open Claude tab straight away. Run `/
 | --- | --- |
 | `/session-widget:tint` | Give this tab a different random colour. |
 | `/session-widget:tint set <colour>` | Give this tab a named colour, such as `set sapphire`. |
-| `/session-widget:tint list` | Show the current scheme's colours and which tab has each. |
-| `/session-widget:tint reset` | Put this tab back to its original background. |
+| `/session-widget:tint list` | Show the current colours and which tab has each. |
+| `/session-widget:tint reset` | Put this tab back to its original colours. |
 | `/session-widget:tint all` | Colour every Claude tab that is not coloured yet. |
 
 The panel picks up a new colour within half a second.
@@ -150,7 +166,7 @@ Set this in the environment Claude Code starts from, for example in `~/.zshrc`:
 export CLAUDE_WIDGET_TINT=off
 ```
 
-New sessions then leave tab backgrounds alone, and their cards are grey. The `/session-widget:tint` command still works if you want a colour on one tab.
+New sessions then leave tab colours alone, and their cards are grey. The `/session-widget:tint` command still works if you want a colour on one tab.
 
 Tab colours only work in Apple's Terminal app. Other terminals are left untouched.
 
@@ -181,7 +197,7 @@ There are three small Python programs and no background service.
                          macOS banner ◀── widget.py (the panel) ◀──reads twice a second
 ```
 
-1. **When a session starts, `tint.py` colours its Terminal tab**, and puts the original colour back when it ends.
+1. **When a session starts, `tint.py` colours its Terminal tab**, and puts the original colours back when it ends.
 2. **Claude Code runs `session-state.py` on its hook events.** These are session start and end, each prompt you send, each finished turn, permission requests, and a few tool calls.
 3. **The hook writes one small status file per session.**
 4. **`widget.py` reads those files twice a second** and redraws the panel when anything changes.
@@ -216,13 +232,13 @@ export CLAUDE_WIDGET_HOME="$HOME/.local/state/claude-widget"
 
 ### Where tab colours are stored
 
-Tab colours live in `~/.claude/tint-state/`, one file per tab, plus `scheme.json` for your chosen scheme. Each tab file is named after the tab's device, with `/` replaced by `_`. For example, `_dev_ttys003.json`:
+Tab colours live in `~/.claude/tint-state/`, one file per tab, plus `scheme.json` for your chosen scheme and mode. Each tab file is named after the tab's device, with `/` replaced by `_`. For example, `_dev_ttys003.json`:
 
 ```json
-{ "orig": "000000", "tint": "0d2547", "name": "sapphire" }
+{ "orig": "000000", "orig_text": "f1f1f1", "tint": "0d2547", "name": "sapphire" }
 ```
 
-- **`orig`** is the tab's own background, restored when the session ends.
+- **`orig`** and **`orig_text`** are the tab's own background and text colour, restored when the session ends.
 - **`tint`** is the colour in use, as six hex digits.
 - **`name`** is shown on idle cards, such as "sapphire tab".
 
@@ -313,7 +329,7 @@ Everything stays on your Mac.
 
 - **No network access.** The widget never sends anything anywhere.
 - **What it reads:** Claude Code's list of running sessions, and the end of each session's transcript to find its title and what it is waiting on.
-- **What it changes:** the background colour of Terminal tabs running Claude Code, put back when each session ends.
+- **What it changes:** the background and text colour of Terminal tabs running Claude Code, put back when each session ends.
 - **What it stores:** the first sixty characters of your latest prompt in each session, in the state folder. Each file is deleted when its session ends.
 
 ---

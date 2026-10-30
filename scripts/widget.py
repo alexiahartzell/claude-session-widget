@@ -16,9 +16,6 @@ CARD_H = 58           # minimum card height
 LINE_H = 18           # title line height
 CARD_GAP = 8
 RADIUS = 16
-PANEL_BG = "#15171e"
-FG = "#f2f0f7"
-DIM = "#9a9db0"
 STATUS_WORD = {"working": "working", "needs_input": "needs you", "permission": "permission",
                "idle": "idle", "watching": "watching"}
 STATE_FILE = os.path.join(w.WIDGET_DIR, "widget-state.json")
@@ -74,7 +71,7 @@ class Widget:
             self.root.config(bg="systemTransparent")
             canvas_bg = "systemTransparent"
         except Exception:
-            canvas_bg = PANEL_BG
+            canvas_bg = "#" + w.PANEL_THEMES["dark"]["bg"]
         self.alive = True
         self.hidden = False
         self.seen_attention = set()
@@ -84,6 +81,7 @@ class Widget:
         self.sessions = []
         self.pulse_items = []       # (item id, bright colour, dim colour)
         self.drag = None
+        self.mode = "dark"
 
         def font(size, bold=False, family="Avenir Next"):
             return tkfont.Font(family=family, size=size, weight="bold" if bold else "normal")
@@ -213,8 +211,9 @@ class Widget:
             sessions = w.cleanup(w.SESSIONS_DIR)
             self.handle_attention(sessions)
             self.handle_empty(sessions)
-            key = [(s["session_id"], s.get("status"), s.get("armed"), w.display_label(s), s.get("title"),
-                    s.get("task"), s.get("color")) for s in sessions]
+            self.mode = w.effective_mode()
+            key = [self.mode] + [(s["session_id"], s.get("status"), s.get("armed"), w.display_label(s),
+                                  s.get("title"), s.get("task"), s.get("color")) for s in sessions]
             if key != self.last_key:
                 self.last_key = key
                 self.redraw(sessions)
@@ -242,24 +241,29 @@ class Widget:
             self.root.withdraw()
 
     # ---- drawing ----
+    def theme(self):
+        """Panel colours for the current light or dark mode, as '#rrggbb'."""
+        return {k: "#" + v for k, v in w.PANEL_THEMES[self.mode].items()}
+
     def redraw(self, sessions):
         c = self.c
+        th = self.theme()
         c.delete("all")
         self.sessions = sessions
         self.pulse_items = []
         head_h = 34
         y = head_h + PAD
         if not sessions:
-            c.create_text(W_PX / 2, y + CARD_H / 2, text="nothing running", fill=DIM, font=self.f_sub)
+            c.create_text(W_PX / 2, y + CARD_H / 2, text="nothing running", fill=th["dim"], font=self.f_sub)
             y += CARD_H
         for s in sessions:
             y += self.draw_card(s, y) + CARD_GAP
         height = y - (CARD_GAP if sessions else 0) + PAD
         c.config(height=height)
-        rounded(c, 0, 0, W_PX, height, RADIUS + 4, fill=PANEL_BG, outline="#2a2d3a", tags=("panel",))
+        rounded(c, 0, 0, W_PX, height, RADIUS + 4, fill=th["bg"], outline=th["outline"], tags=("panel",))
         c.tag_lower("panel")
-        c.create_text(PAD + 8, head_h / 2, text="claude", anchor="w", fill=DIM, font=self.f_title)
-        c.create_text(W_PX - PAD - 8, head_h / 2, text="×", anchor="e", fill=DIM,
+        c.create_text(PAD + 8, head_h / 2, text="claude", anchor="w", fill=th["dim"], font=self.f_title)
+        c.create_text(W_PX - PAD - 8, head_h / 2, text="×", anchor="e", fill=th["dim"],
                       font=self.f_close, tags=("close",))
         self.place()
         if not self.hidden and self.root.state() == "withdrawn" and sessions:
@@ -292,28 +296,29 @@ class Widget:
     def draw_card(self, s, y):
         """Draw one session card at y; returns its height."""
         c = self.c
+        th = self.theme()
         tag = "card:" + s["session_id"]
-        tint = "#" + (s.get("color") or w.GREY)
-        vivid = "#" + w.brighten(s.get("color") or w.GREY)
+        color = s.get("color") or w.GREY
+        vivid = "#" + w.accent(color, self.mode)
         status = s.get("status") or "idle"
         attention = status in w.ATTENTION
         x1, x2 = PAD, W_PX - PAD
         text_x, text_w = x1 + 18, (x2 - 92) - (x1 + 18)
         lines = self.title_lines(w.display_label(s), text_w)
         h = CARD_H + LINE_H * (len(lines) - 1)
-        card_fill = "#" + w.card_fill(s.get("color") or w.GREY, PANEL_BG[1:])
+        card_fill = "#" + w.card_fill(color, th["bg"][1:], self.mode)
         glow = rounded(c, x1 - 2, y - 2, x2 + 2, y + h + 2, RADIUS + 2,
                        fill="", outline=vivid if attention else "", width=3, tags=(tag,))
         rounded(c, x1, y, x2, y + h, RADIUS, fill=card_fill, outline="", tags=(tag,))
         ty = y + 19
         for line in lines:
             c.create_text(text_x, ty, text=line, anchor="w",
-                          fill=FG if attention else mix(FG, DIM, 0.4), font=self.f_label, tags=(tag,))
+                          fill=th["fg"] if attention else mix(th["fg"], th["dim"], 0.4), font=self.f_label, tags=(tag,))
             ty += LINE_H
         sub = self.fit(w.subtitle(s), self.f_sub, text_w)
-        c.create_text(text_x, ty + 3, text=sub, anchor="w", fill=DIM, font=self.f_sub, tags=(tag,))
+        c.create_text(text_x, ty + 3, text=sub, anchor="w", fill=th["dim"], font=self.f_sub, tags=(tag,))
         c.create_text(x2 - 16, y + h / 2, text=STATUS_WORD.get(status, status), anchor="e",
-                      fill=vivid if attention else DIM, font=self.f_status, tags=(tag,))
+                      fill=vivid if attention else th["dim"], font=self.f_status, tags=(tag,))
         if attention:
             self.pulse_items.append((glow, vivid, mix(vivid, card_fill, 0.7)))
         return h
