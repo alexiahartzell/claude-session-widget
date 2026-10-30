@@ -30,14 +30,13 @@ DARK = {
     "muted": [
         ("midnight", "0d1b2a"), ("plum", "1e1026"), ("forest", "0c1f16"), ("wine", "26101a"),
         ("teal", "0c2224"), ("espresso", "211810"), ("indigo", "14132b"), ("moss", "1a200e"),
-        ("slate", "171c24"), ("rust", "261410"), ("mulberry", "2a1428"), ("olive", "1f2010"),
-        ("cobalt", "0f1a36"), ("sea", "0e2a20"), ("cocoa", "2a1e1a"),
+        ("rust", "261410"), ("mulberry", "2a1428"),
     ],
     # Deeper, more saturated colours that are easy to tell apart.
     "jewel": [
         ("sapphire", "0d2547"), ("emerald", "0a2e22"), ("ruby", "3a0d1e"), ("amethyst", "1f0f3d"),
-        ("amber", "3a2805"), ("turquoise", "05302f"), ("garnet", "330a12"), ("jade", "12300a"),
-        ("violet", "2d0a3a"), ("copper", "3a1a05"), ("lapis", "0a1a40"), ("magenta", "3a0a2e"),
+        ("amber", "3a2805"), ("turquoise", "05302f"), ("jade", "12300a"), ("violet", "2d0a3a"),
+        ("copper", "3a1a05"), ("magenta", "3a0a2e"),
     ],
     # Twilight purples, roses and evening blues.
     "dusk": [
@@ -51,13 +50,15 @@ DARK = {
         ("deep", "15243c"), ("tide", "0a2a33"), ("pearl", "1f2a38"), ("seaglass", "123228"),
         ("storm", "1a2030"), ("current", "082638"),
     ],
-    # Six hues picked by simulating protanopia, deuteranopia and tritanopia, so
-    # every pair of card colours stays clearly different for each.
+    # Ten hues picked by simulating protanopia, deuteranopia and tritanopia, so
+    # every pair of card colours stays as different as ten colours allow for each.
     "colourblind": [
-        ("copper", "3d2c1e"), ("brass", "3d3d1e"), ("jade", "1e3d30"), ("harbour", "1e2e3d"),
-        ("indigo", "211e3d"), ("raspberry", "3d1e2d"),
+        ("cinnabar", "402620"), ("copper", "402f20"), ("amber", "403720"), ("brass", "404020"),
+        ("jade", "20402b"), ("lagoon", "203740"), ("harbour", "202f40"), ("indigo", "222040"),
+        ("orchid", "402035"), ("raspberry", "402024"),
     ],
 }
+PALETTE_SIZE = 10                                # every scheme has this many colours
 SCHEMES = DARK
 TEXT = {"dark": "e8e6ee", "light": "1f2329"}     # tab text colour in each mode
 

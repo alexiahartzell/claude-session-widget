@@ -116,13 +116,15 @@ There are five colour schemes, and each comes in a dark and a light version. Lig
 
 | Scheme | Colours | Feel |
 | --- | --- | --- |
-| **muted** | 15 | Quiet, low-saturation colours. The default. |
-| **jewel** | 12 | Richer sapphires, emeralds and rubies that are easy to tell apart. |
+| **muted** | 10 | Quiet, low-saturation colours. The default. |
+| **jewel** | 10 | Richer sapphires, emeralds and rubies that are easy to tell apart. |
 | **dusk** | 10 | Twilight purples, roses and evening blues. |
 | **ocean** | 10 | Sea blues, teals and greens. |
-| **colourblind** | 6 | Copper, brass, jade, harbour blue, indigo and raspberry. |
+| **colourblind** | 10 | Warm reds and golds, jade, blues, indigo and pinks. |
 
-**The colourblind scheme was chosen by simulation.** Its six colours were picked so that every pair of cards stays clearly different under simulated protanopia, deuteranopia and tritanopia. A test in the suite checks this, so it stays true if the colours are ever edited.
+**Every scheme has ten colours**, so ten tabs can be open before any colour repeats.
+
+**The colourblind scheme was chosen by simulation.** Its colours were picked so that every pair of cards stays as different as possible under simulated protanopia, deuteranopia and tritanopia. A test in the suite checks this, so it stays true if the colours are ever edited.
 
 Switch scheme:
 

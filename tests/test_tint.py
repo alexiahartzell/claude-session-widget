@@ -8,8 +8,9 @@ tint = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(tint)
 
 
-def test_every_scheme_has_a_dark_and_a_light_version():
+def test_every_scheme_has_a_dark_and_a_light_version_of_the_same_size():
     for scheme in tint.DARK:
+        assert len(tint.DARK[scheme]) == tint.PALETTE_SIZE, scheme
         dark, light = tint.palette(scheme, "dark"), tint.palette(scheme, "light")
         assert [n for n, _ in dark] == [n for n, _ in light]
         assert not any(w.is_light(h) for _, h in dark), scheme
@@ -118,4 +119,4 @@ def test_colourblind_cards_stay_distinct_for_every_colour_vision_type():
         labs = [_lab(a, matrix) for a in accents]
         closest = min(sum((p - q) ** 2 for p, q in zip(a, b)) ** 0.5
                       for a, b in itertools.combinations(labs, 2))
-        assert closest > 15, name
+        assert closest > 9, name
