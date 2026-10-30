@@ -1,0 +1,11 @@
+{
+  "name": "session-widget",
+  "owner": { "name": "Alexia Hartzell" },
+  "plugins": [
+    {
+      "name": "session-widget",
+      "source": "./",
+      "description": "Always-on-top macOS panel listing your live Claude Code sessions."
+    }
+  ]
+}

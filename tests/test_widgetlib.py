@@ -1,0 +1,467 @@
+import json, os, time
+import widgetlib as w
+
+
+def test_write_and_load_session(tmp_path):
+    d = str(tmp_path / "sessions")
+    w.write_session(d, {"session_id": "abc", "status": "idle"})
+    assert w.load_session(d, "abc") == {"session_id": "abc", "status": "idle"}
+    assert w.load_session(d, "nope") is None
+
+
+def test_load_sessions_skips_malformed(tmp_path):
+    d = tmp_path / "sessions"
+    d.mkdir()
+    (d / "good.json").write_text(json.dumps({"session_id": "good"}))
+    (d / "bad.json").write_text("{not json")
+    (d / "empty.json").write_text("")
+    (d / "notes.txt").write_text("ignore me")
+    got = w.load_sessions(str(d))
+    assert [s["session_id"] for s in got] == ["good"]
+
+
+def test_update_session_preserves_fields(tmp_path):
+    d = str(tmp_path / "sessions")
+    w.write_session(d, {"session_id": "abc", "label": "proj", "status": "idle", "updated": 1.0})
+    old, new = w.update_session(d, "abc", status="working", task="hello")
+    assert old["status"] == "idle"
+    assert new["label"] == "proj"
+    assert new["status"] == "working"
+    assert new["task"] == "hello"
+    assert new["updated"] > 1.0
+    assert w.load_session(d, "abc") == new
+
+
+def test_update_session_creates_when_missing(tmp_path):
+    d = str(tmp_path / "sessions")
+    old, new = w.update_session(d, "fresh", status="idle")
+    assert old is None
+    assert new["session_id"] == "fresh"
+    assert new["status"] == "idle"
+
+
+def test_delete_session(tmp_path):
+    d = str(tmp_path / "sessions")
+    w.write_session(d, {"session_id": "abc"})
+    w.delete_session(d, "abc")
+    w.delete_session(d, "abc")  # second delete is a no-op
+    assert w.load_session(d, "abc") is None
+
+
+def test_truncate_task_newlines():
+    p = "fix the plot\n\nthen   rerun  the   fit " + "x" * 100
+    out = w.truncate_task(p)
+    assert "\n" not in out
+    assert len(out) <= 60
+    assert out.startswith("fix the plot then rerun the fit")
+
+
+def test_truncate_task_unicode_and_empty():
+    assert w.truncate_task("") == ""
+    assert w.truncate_task("   ") == ""
+    assert w.truncate_task("ψ-function σ") == "ψ-function σ"
+
+
+def test_display_label_override_wins():
+    assert w.display_label({"label": "proj"}) == "proj"
+    assert w.display_label({"label": "proj", "label_override": "paper"}) == "paper"
+    assert w.display_label({"label": "proj", "label_override": ""}) == "proj"
+    assert w.display_label({}) == "?"
+import subprocess, sys
+
+
+def test_read_tint_found(tmp_path):
+    (tmp_path / "_dev_ttys008.json").write_text(
+        json.dumps({"orig": "000000", "tint": "1e1026", "name": "plum"}))
+    assert w.read_tint(str(tmp_path), "/dev/ttys008") == ("1e1026", "plum")
+
+
+def test_read_tint_missing(tmp_path):
+    assert w.read_tint(str(tmp_path), "/dev/ttys999") == (w.GREY, "grey")
+    assert w.read_tint(str(tmp_path), None) == (w.GREY, "grey")
+    (tmp_path / "_dev_ttys001.json").write_text("garbage")
+    assert w.read_tint(str(tmp_path), "/dev/ttys001") == (w.GREY, "grey")
+
+
+def test_brighten_keeps_hue_and_is_vivid():
+    # plum 1e1026 is dark purple: blue > red > green. The swatch colour must
+    # keep that ordering and be bright and saturated enough to tell apart.
+    out = w.brighten("1e1026")
+    r, g, b = (int(out[i:i + 2], 16) for i in (0, 2, 4))
+    assert len(out) == 6
+    assert b > r > g
+    assert max(r, g, b) >= 180
+    assert max(r, g, b) - min(r, g, b) >= 80
+    # forest 0c1f16 stays green-dominant
+    r2, g2, b2 = (int(w.brighten("0c1f16")[i:i + 2], 16) for i in (0, 2, 4))
+    assert g2 > r2 and g2 > b2
+    # pure grey stays grey (no hue to amplify) but gets lifted
+    rg, gg, bg = (int(w.brighten(w.GREY)[i:i + 2], 16) for i in (0, 2, 4))
+    assert abs(rg - gg) <= 12 and abs(gg - bg) <= 12 and rg >= 120
+    assert w.brighten("ffffff") == "ffffff"
+
+
+def test_is_alive():
+    assert w.is_alive(os.getpid())
+    p = subprocess.Popen([sys.executable, "-c", "pass"])
+    p.wait()
+    assert not w.is_alive(p.pid)
+    assert not w.is_alive(None)
+
+
+def test_claude_pid_of_returns_none_when_no_claude_ancestor():
+    # pytest run from a shell has no process named "claude" above it,
+    # unless the tests are run from inside Claude Code; accept both.
+    got = w.claude_pid_of(os.getpid())
+    assert got is None or isinstance(got, int)
+
+
+def test_sort_sessions_attention_first_then_recent():
+    s = [
+        {"session_id": "a", "status": "working", "updated": 30},
+        {"session_id": "b", "status": "needs_input", "updated": 10},
+        {"session_id": "c", "status": "idle", "updated": 20},
+        {"session_id": "d", "status": "permission", "updated": 5},
+    ]
+    assert [x["session_id"] for x in w.sort_sessions(s)] == ["b", "d", "a", "c"]
+
+
+def test_is_stale():
+    now = 1_000_000.0
+    live = {"pid": 1, "updated": now - 10}
+    assert not w.is_stale(live, now, alive=lambda p: True)
+    assert w.is_stale(live, now, alive=lambda p: False)
+    old = {"pid": 1, "updated": now - w.MAX_AGE_S - 1}
+    assert w.is_stale(old, now, alive=lambda p: True)
+    assert w.is_stale({"updated": now}, now, alive=lambda p: True)  # no pid
+
+
+def test_cleanup_deletes_stale_and_returns_sorted(tmp_path):
+    d = str(tmp_path / "sessions")
+    now = 1_000_000.0
+    w.write_session(d, {"session_id": "dead", "pid": 2, "status": "working", "updated": now})
+    w.write_session(d, {"session_id": "old", "pid": 1, "status": "working", "updated": now - 2 * w.MAX_AGE_S})
+    w.write_session(d, {"session_id": "ok", "pid": 1, "status": "working", "updated": now - 5})
+    w.write_session(d, {"session_id": "hot", "pid": 1, "status": "needs_input", "updated": now - 50})
+    got = w.cleanup(d, now, alive=lambda p: p == 1)
+    assert [s["session_id"] for s in got] == ["hot", "ok"]
+    assert sorted(os.listdir(d)) == ["hot.json", "ok.json"]
+
+
+def test_load_sessions_ignores_foreign_json(tmp_path):
+    # Claude Code keeps its own <pid>.json files in ~/.claude/sessions with a
+    # "sessionId" key; the widget must never treat those as its own.
+    d = tmp_path / "sessions"
+    d.mkdir()
+    (d / "17282.json").write_text(json.dumps({"pid": 17282, "sessionId": "x", "status": "busy"}))
+    assert w.load_sessions(str(d)) == []
+
+
+# ---- mirroring Claude Code's own session records (for sessions that
+# started before the hooks were installed, or have not fired a hook yet) ----
+
+def _claude_record(d, pid, sid, status, cwd="/Users/alexia/miskatonic"):
+    d.mkdir(exist_ok=True)
+    (d / f"{pid}.json").write_text(json.dumps(
+        {"pid": pid, "sessionId": sid, "cwd": cwd, "status": status, "name": "x"}))
+
+
+def test_mirror_seeds_missing_sessions_with_colour(tmp_path):
+    cl, se, ti = tmp_path / "claude", str(tmp_path / "sessions"), tmp_path / "tint"
+    ti.mkdir()
+    (ti / "_dev_ttys003.json").write_text(json.dumps({"orig": "000000", "tint": "0c1f16", "name": "forest"}))
+    _claude_record(cl, 3989, "sid-a", "busy")
+    _claude_record(cl, 5114, "sid-b", "idle")
+    _claude_record(cl, 9999, "sid-dead", "busy")
+    new_attention = w.mirror_claude_sessions(
+        str(cl), se, tint_dir=str(ti),
+        alive=lambda p: p in (3989, 5114),
+        tty_of=lambda p: "/dev/ttys003" if p == 3989 else None)
+    a, b = w.load_session(se, "sid-a"), w.load_session(se, "sid-b")
+    assert a["status"] == "working" and a["source"] == "mirror"
+    assert a["color"] == "0c1f16" and a["color_name"] == "forest" and a["tty"] == "/dev/ttys003"
+    assert a["label"] == "miskatonic" and a["pid"] == 3989
+    assert b["status"] == "idle" and b["color"] == w.GREY     # idle at seed time: plain, no pulse
+    assert w.load_session(se, "sid-dead") is None
+    assert new_attention == []
+
+
+def test_mirror_busy_to_idle_becomes_needs_input_once(tmp_path):
+    cl, se = tmp_path / "claude", str(tmp_path / "sessions")
+    _claude_record(cl, 3989, "sid-a", "busy")
+    w.mirror_claude_sessions(str(cl), se, tint_dir=str(tmp_path), alive=lambda p: True, tty_of=lambda p: None)
+    _claude_record(cl, 3989, "sid-a", "idle")
+    got = w.mirror_claude_sessions(str(cl), se, tint_dir=str(tmp_path), alive=lambda p: True, tty_of=lambda p: None)
+    assert [s["session_id"] for s in got] == ["sid-a"]
+    assert w.load_session(se, "sid-a")["status"] == "needs_input"
+    got2 = w.mirror_claude_sessions(str(cl), se, tint_dir=str(tmp_path), alive=lambda p: True, tty_of=lambda p: None)
+    assert got2 == []
+    assert w.load_session(se, "sid-a")["status"] == "needs_input"
+    _claude_record(cl, 3989, "sid-a", "busy")
+    w.mirror_claude_sessions(str(cl), se, tint_dir=str(tmp_path), alive=lambda p: True, tty_of=lambda p: None)
+    assert w.load_session(se, "sid-a")["status"] == "working"
+
+
+def test_mirror_leaves_hook_owned_sessions_alone(tmp_path):
+    cl, se = tmp_path / "claude", str(tmp_path / "sessions")
+    _claude_record(cl, 3989, "sid-a", "idle")
+    w.write_session(se, {"session_id": "sid-a", "pid": 3989, "status": "working",
+                         "source": "hook", "label": "proj", "updated": 5.0})
+    w.mirror_claude_sessions(str(cl), se, tint_dir=str(tmp_path), alive=lambda p: True, tty_of=lambda p: None)
+    assert w.load_session(se, "sid-a")["status"] == "working"
+    assert w.load_session(se, "sid-a")["updated"] == 5.0
+
+
+def test_mirror_survives_bad_records(tmp_path):
+    cl, se = tmp_path / "claude", str(tmp_path / "sessions")
+    cl.mkdir()
+    (cl / "1.json").write_text("junk")
+    (cl / "2.json").write_text(json.dumps({"pid": 2}))          # no sessionId
+    (cl / "3.key").write_text("secret")
+    assert w.mirror_claude_sessions(str(cl), se, tint_dir=str(tmp_path), alive=lambda p: True, tty_of=lambda p: None) == []
+    assert w.mirror_claude_sessions(str(tmp_path / "missing"), se, tint_dir=str(tmp_path), alive=lambda p: True, tty_of=lambda p: None) == []
+
+
+def test_mirror_uses_claude_name_as_task(tmp_path):
+    cl, se = tmp_path / "claude", str(tmp_path / "sessions")
+    _claude_record(cl, 3989, "sid-a", "busy")
+    w.mirror_claude_sessions(str(cl), se, tint_dir=str(tmp_path), alive=lambda p: True, tty_of=lambda p: None)
+    assert w.load_session(se, "sid-a")["task"] == "x"
+
+
+def test_subtitle_falls_back_to_colour_name():
+    assert w.subtitle({"task": "fix plot", "color_name": "plum"}) == "fix plot"
+    assert w.subtitle({"task": "", "color_name": "plum"}) == "plum tab"
+    assert w.subtitle({}) == "grey tab"
+
+
+# ---- review fixes ----
+
+def test_concurrent_updates_lose_nothing(tmp_path):
+    import multiprocessing as mp
+    d = str(tmp_path / "sessions")
+    w.write_session(d, {"session_id": "s", "n_a": 0, "n_b": 0, "status": "idle"})
+
+    def worker(field):
+        for _ in range(150):
+            w.update_session_fn(d, "s", lambda cur, f=field: {f: cur.get(f, 0) + 1})
+
+    ctx = mp.get_context("fork")
+    ps = [ctx.Process(target=worker, args=(f,)) for f in ("n_a", "n_b")]
+    [p.start() for p in ps]; [p.join() for p in ps]
+    got = w.load_session(d, "s")
+    assert got["n_a"] == 150 and got["n_b"] == 150
+    assert got["status"] == "idle"
+    assert [n for n in os.listdir(d) if n.endswith(".tmp")] == []
+
+
+def test_update_session_fn_creates_when_missing(tmp_path):
+    d = str(tmp_path / "sessions")
+    old, new = w.update_session_fn(d, "x", lambda cur: {"status": "working"})
+    assert old is None and new["status"] == "working" and new["session_id"] == "x"
+
+
+def test_cleanup_removes_stale_temp_files(tmp_path):
+    d = tmp_path / "sessions"
+    d.mkdir()
+    (d / "abc.json.tmp").write_text("{")
+    os.utime(d / "abc.json.tmp", (1, 1))
+    (d / "fresh.json.tmp").write_text("{")
+    w.cleanup(str(d), now=1_000_000.0)
+    assert sorted(os.listdir(d)) == ["fresh.json.tmp"]
+
+
+def test_sort_and_stale_survive_junk_updated():
+    s = [{"session_id": "a", "status": "idle", "updated": "junk"},
+         {"session_id": "b", "status": "idle", "updated": None}]
+    assert [x["session_id"] for x in w.sort_sessions(s)] == ["a", "b"]
+    assert w.is_stale({"pid": 1, "updated": "junk"}, 1_000_000.0, alive=lambda p: True)
+
+
+def test_direct_tty_and_headless_detection():
+    fake = {"17282": ["1", "ttys008", "claude"], "23185": ["1", "??", "claude"]}
+    ps = lambda pid, fields: fake.get(str(pid), [])
+    assert w.direct_tty(17282, ps=ps) == "/dev/ttys008"
+    assert w.direct_tty(23185, ps=ps) is None
+    assert w.direct_tty(1, ps=ps) is None
+
+
+def test_single_instance_lock(tmp_path):
+    p = str(tmp_path / "widget.pid")
+    h1 = w.acquire_single_instance(p)
+    assert h1 is not None
+    assert open(p).read().strip() == str(os.getpid())
+    assert w.acquire_single_instance(p) is None
+    h1.close()
+    h2 = w.acquire_single_instance(p)
+    assert h2 is not None
+    h2.close()
+
+
+def test_subtitle_while_watching_names_what_it_waits_on():
+    assert w.subtitle({"status": "watching", "armed": "a watcher", "task": "run the calc"}) == "waiting on a watcher · run the calc"
+    assert w.subtitle({"status": "watching", "armed": "a subagent", "task": ""}) == "waiting on a subagent"
+
+
+# ---- reading armed watchers out of a mirrored session's transcript ----
+
+def _jl(*msgs):
+    return "\n".join(json.dumps(m) for m in msgs) + "\n"
+
+
+def _user(text):
+    return {"type": "user", "message": {"role": "user", "content": text}}
+
+
+def _tool_result():
+    return {"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "content": "ok"}]}}
+
+
+def _assistant(*blocks):
+    return {"type": "assistant", "message": {"role": "assistant", "content": list(blocks)}}
+
+
+def _tool(name, **inp):
+    return {"type": "tool_use", "name": name, "input": inp}
+
+
+def test_armed_in_transcript_sees_background_job_in_last_turn(tmp_path):
+    f = tmp_path / "s.jsonl"
+    f.write_text(_jl(
+        _user("run the calc"),
+        _assistant(_tool("Bash", command="ls")), _tool_result(),
+        _assistant(_tool("Bash", command="python3 calc.py", run_in_background=True)), _tool_result(),
+        _assistant({"type": "text", "text": "I'll wait for it."}),
+        {"type": "system", "content": "x"}))
+    assert w.armed_in_transcript(str(f)) == "a background job"
+
+
+def test_armed_in_transcript_cleared_once_the_watcher_fired(tmp_path):
+    f = tmp_path / "s.jsonl"
+    f.write_text(_jl(
+        _user("run the calc"),
+        _assistant(_tool("Bash", command="python3 calc.py", run_in_background=True)), _tool_result(),
+        _user("<task-notification>done</task-notification>"),
+        _assistant(_tool("Read", file_path="/x")), _tool_result(),
+        _assistant({"type": "text", "text": "Finished."})))
+    assert w.armed_in_transcript(str(f)) is None
+
+
+def test_armed_in_transcript_rearmed_after_notification(tmp_path):
+    f = tmp_path / "s.jsonl"
+    f.write_text(_jl(
+        _user("run the calc"),
+        _assistant(_tool("Bash", command="python3 calc.py", run_in_background=True)), _tool_result(),
+        _user("<task-notification>done</task-notification>"),
+        _assistant(_tool("Agent", prompt="review")), _tool_result()))
+    assert w.armed_in_transcript(str(f)) == "a subagent"
+
+
+def test_armed_in_transcript_handles_missing_and_junk(tmp_path):
+    assert w.armed_in_transcript(str(tmp_path / "nope.jsonl")) is None
+    f = tmp_path / "s.jsonl"
+    f.write_text("not json\n{\"type\": \"user\"}\n")
+    assert w.armed_in_transcript(str(f)) is None
+
+
+def test_armed_in_transcript_only_reads_the_tail(tmp_path):
+    f = tmp_path / "s.jsonl"
+    filler = [_assistant({"type": "text", "text": "x" * 500})] * 300
+    f.write_text(_jl(_user("old"), *filler, _user("go"),
+                     _assistant(_tool("ScheduleWakeup", delaySeconds=600)), _tool_result()))
+    assert w.armed_in_transcript(str(f), tail_bytes=20000) == "a timer"
+
+
+def test_find_transcript(tmp_path):
+    proj = tmp_path / "projects" / "-Users-alexia-miskatonic"
+    proj.mkdir(parents=True)
+    (proj / "sid-a.jsonl").write_text("")
+    assert w.find_transcript("sid-a", str(tmp_path / "projects")) == str(proj / "sid-a.jsonl")
+    assert w.find_transcript("sid-zzz", str(tmp_path / "projects")) is None
+
+
+def test_mirror_marks_watching_from_transcript_and_alerts_when_done(tmp_path):
+    cl, se = tmp_path / "claude", str(tmp_path / "sessions")
+    proj = tmp_path / "projects" / "-x-proj"
+    proj.mkdir(parents=True)
+    tr = proj / "sid-a.jsonl"
+    tr.write_text(_jl(_user("run it"),
+                      _assistant(_tool("Bash", command="calc", run_in_background=True)), _tool_result(),
+                      _assistant({"type": "text", "text": "waiting"})))
+    _claude_record(cl, 3989, "sid-a", "shell", cwd="/x/proj")
+    kw = dict(tint_dir=str(tmp_path), alive=lambda p: True, tty_of=lambda p: None,
+              projects_dir=str(tmp_path / "projects"))
+    assert w.mirror_claude_sessions(str(cl), se, **kw) == []
+    s = w.load_session(se, "sid-a")
+    assert s["status"] == "watching" and s["armed"] == "a background job"
+    # the job finishes, Claude resumes, finishes its turn with no new watcher
+    import time as _t; _t.sleep(0.01)
+    with open(tr, "a") as fh:
+        fh.write(_jl(_user("<task-notification>done</task-notification>"),
+                     _assistant({"type": "text", "text": "All done."})))
+    os.utime(tr, None)
+    _claude_record(cl, 3989, "sid-a", "idle", cwd="/x/proj")
+    got = w.mirror_claude_sessions(str(cl), se, **kw)
+    assert [x["session_id"] for x in got] == ["sid-a"]
+    s = w.load_session(se, "sid-a")
+    assert s["status"] == "needs_input" and "armed" not in s
+    # steady state: no repeat alert
+    assert w.mirror_claude_sessions(str(cl), se, **kw) == []
+
+
+# ---- session titles: Claude Code writes {"type":"ai-title","aiTitle":...} records ----
+
+def test_title_in_transcript_returns_latest_ai_title(tmp_path):
+    f = tmp_path / "s.jsonl"
+    f.write_text(_jl({"type": "ai-title", "aiTitle": "Old title", "sessionId": "s"},
+                     _user("go"), _assistant({"type": "text", "text": "ok"}),
+                     {"type": "ai-title", "aiTitle": "A4-spectroscopy tasks", "sessionId": "s"},
+                     {"type": "last-prompt", "lastPrompt": "x"}))
+    assert w.title_in_transcript(str(f)) == "A4-spectroscopy tasks"
+
+
+def test_title_in_transcript_searches_back_through_a_long_file(tmp_path):
+    f = tmp_path / "s.jsonl"
+    filler = [_assistant({"type": "text", "text": "x" * 500})] * 800      # ~400 KB after the title
+    f.write_text(_jl({"type": "ai-title", "aiTitle": "Buried title"}, *filler))
+    assert w.title_in_transcript(str(f), chunk=65536) == "Buried title"
+
+
+def test_title_in_transcript_missing_or_untitled(tmp_path):
+    assert w.title_in_transcript(str(tmp_path / "nope.jsonl")) is None
+    f = tmp_path / "s.jsonl"
+    f.write_text(_jl(_user("go"), {"type": "ai-title", "aiTitle": ""}))
+    assert w.title_in_transcript(str(f)) is None
+
+
+def test_display_label_prefers_override_then_title_then_folder():
+    assert w.display_label({"label": "miskatonic", "title": "A4-spectroscopy tasks"}) == "A4-spectroscopy tasks"
+    assert w.display_label({"label": "miskatonic", "title": "A4", "label_override": "paper"}) == "paper"
+    assert w.display_label({"label": "miskatonic", "title": ""}) == "miskatonic"
+
+
+def test_refresh_titles_updates_only_when_transcript_changed(tmp_path):
+    se = str(tmp_path / "sessions")
+    proj = tmp_path / "projects" / "-x"
+    proj.mkdir(parents=True)
+    tr = proj / "sid-a.jsonl"
+    tr.write_text(_jl({"type": "ai-title", "aiTitle": "First"}))
+    w.write_session(se, {"session_id": "sid-a", "pid": 1, "label": "x", "status": "idle", "updated": 5.0})
+    w.write_session(se, {"session_id": "sid-none", "pid": 1, "label": "y", "status": "idle", "updated": 5.0})
+    w.refresh_titles(se, projects_dir=str(tmp_path / "projects"))
+    a = w.load_session(se, "sid-a")
+    assert a["title"] == "First" and a["updated"] == 5.0        # a title refresh is not activity
+    assert "title" not in w.load_session(se, "sid-none")
+    # unchanged transcript: nothing rewritten
+    os.utime(tr, (1, 1))
+    w.refresh_titles(se, projects_dir=str(tmp_path / "projects"))
+    os.utime(tr, (1, 1))
+    first_mtime = w.load_session(se, "sid-a")["title_mtime"]
+    w.refresh_titles(se, projects_dir=str(tmp_path / "projects"))
+    assert w.load_session(se, "sid-a")["title_mtime"] == first_mtime
+    # changed transcript: new title picked up
+    with open(tr, "a") as fh:
+        fh.write(_jl({"type": "ai-title", "aiTitle": "Second"}))
+    os.utime(tr, (2, 2))
+    w.refresh_titles(se, projects_dir=str(tmp_path / "projects"))
+    assert w.load_session(se, "sid-a")["title"] == "Second"

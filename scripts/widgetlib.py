@@ -1,0 +1,450 @@
+"""Pure helpers shared by the session hook and the widget. No tkinter here."""
+import fcntl, json, os, re, subprocess, tempfile, time
+
+HOME = os.path.expanduser("~")
+CODE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Runtime state lives apart from the code, so the code can sit in a read-only plugin cache.
+WIDGET_DIR = os.environ.get("CLAUDE_WIDGET_HOME") or os.path.join(HOME, ".claude", "widget")
+SESSIONS_DIR = os.path.join(WIDGET_DIR, "sessions")
+TINT_DIR = os.path.join(HOME, ".claude", "tint-state")
+
+ATTENTION = {"needs_input", "permission"}
+GREY = "3c3c3c"
+MAX_AGE_S = 12 * 3600
+
+
+def session_path(sessions_dir, session_id):
+    return os.path.join(sessions_dir, session_id + ".json")
+
+
+def write_session(sessions_dir, data):
+    os.makedirs(sessions_dir, exist_ok=True)
+    path = session_path(sessions_dir, data["session_id"])
+    fd, tmp = tempfile.mkstemp(prefix=".", suffix=".json.tmp", dir=sessions_dir)
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(data, f)
+        os.replace(tmp, path)
+    except Exception:
+        try: os.remove(tmp)
+        except OSError: pass
+        raise
+
+
+def _read_json(path):
+    try:
+        with open(path) as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else None
+    except Exception:
+        return None
+
+
+def load_session(sessions_dir, session_id):
+    return _read_json(session_path(sessions_dir, session_id))
+
+
+def load_sessions(sessions_dir):
+    out = []
+    try:
+        names = sorted(os.listdir(sessions_dir))
+    except FileNotFoundError:
+        return out
+    for name in names:
+        if not name.endswith(".json"):
+            continue
+        data = _read_json(os.path.join(sessions_dir, name))
+        if data and data.get("session_id"):
+            out.append(data)
+    return out
+
+
+def _lock(sessions_dir, session_id):
+    os.makedirs(sessions_dir, exist_ok=True)
+    f = open(os.path.join(sessions_dir, ".lock"), "a+")
+    fcntl.flock(f, fcntl.LOCK_EX)
+    return f
+
+
+def update_session_fn(sessions_dir, session_id, fn, touch=True):
+    """Locked read-modify-write: fn(current) -> fields to merge; a None value
+    removes that field. Returns (old, new). touch=False keeps `updated` as is
+    (for bookkeeping that is not session activity)."""
+    lock = _lock(sessions_dir, session_id)
+    try:
+        old = load_session(sessions_dir, session_id)
+        new = dict(old or {"session_id": session_id})
+        new.update(fn(dict(new)) or {})
+        new = {k: v for k, v in new.items() if v is not None}
+        new["session_id"] = session_id
+        if touch or "updated" not in new:
+            new["updated"] = time.time()
+        write_session(sessions_dir, new)
+    finally:
+        lock.close()
+    return old, new
+
+
+def update_session(sessions_dir, session_id, **fields):
+    return update_session_fn(sessions_dir, session_id, lambda cur: fields)
+
+
+def delete_session(sessions_dir, session_id):
+    try:
+        os.remove(session_path(sessions_dir, session_id))
+    except FileNotFoundError:
+        pass
+
+
+def truncate_task(prompt, n=60):
+    text = re.sub(r"\s+", " ", prompt or "").strip()
+    return text[:n]
+
+
+def display_label(session):
+    """Manual name, else Claude Code's own AI title for the chat, else the folder."""
+    return (session.get("label_override") or session.get("title")
+            or session.get("label") or "?")
+
+
+def subtitle(session):
+    """Second line of a row: what it waits on, the task, or the tab colour."""
+    task = (session.get("task") or "").strip()
+    if session.get("status") == "watching" and session.get("armed"):
+        return f"waiting on {session['armed']}" + (f" · {task}" if task else "")
+    return task or f"{session.get('color_name') or 'grey' } tab"
+
+
+def read_tint(tint_dir, tty):
+    if not tty:
+        return GREY, "grey"
+    path = os.path.join(tint_dir, tty.replace("/", "_") + ".json")
+    data = _read_json(path)
+    if not data or not data.get("tint"):
+        return GREY, "grey"
+    return data["tint"], data.get("name", "tint")
+
+
+def brighten(h, value=0.82, min_sat=0.55):
+    """Lift a dark muted tab tint to a vivid swatch colour with the same hue."""
+    import colorsys
+    r, g, b = (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    hue, sat, val = colorsys.rgb_to_hsv(r, g, b)
+    if val >= 0.95 and sat < 0.05:
+        return h                                   # already light, leave it
+    if sat < 0.08:
+        return "".join(f"{int(max(val, 0.5) * 255):02x}" for _ in range(3))
+    sat = max(sat, min_sat)
+    val = max(val, value)
+    return "".join(f"{int(round(c * 255)):02x}" for c in colorsys.hsv_to_rgb(hue, sat, val))
+
+
+def _ps(pid, fields):
+    try:
+        return subprocess.check_output(
+            ["ps", "-o", fields, "-p", str(pid)], text=True).split(None, 2)
+    except Exception:
+        return []
+
+
+def tty_of_pid(pid, ps=None):
+    ps = ps or _ps
+    for _ in range(12):
+        out = ps(pid, "ppid=,tty=")
+        if len(out) < 2:
+            return None
+        ppid, tty = out[0], out[1]
+        if tty.startswith("ttys"):
+            return "/dev/" + tty
+        if ppid in ("0", "1"):
+            return None
+        pid = ppid
+    return None
+
+
+def direct_tty(pid, ps=None):
+    """The tty of this exact process (no walking up), or None for '??'."""
+    out = (ps or _ps)(pid, "ppid=,tty=")
+    if len(out) < 2 or not out[1].startswith("ttys"):
+        return None
+    return "/dev/" + out[1]
+
+
+def acquire_single_instance(pid_file):
+    """Lock the pid file for this process. Returns the open handle (keep it), or None if taken."""
+    os.makedirs(os.path.dirname(pid_file), exist_ok=True)
+    f = open(pid_file, "a+")
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        f.close()
+        return None
+    f.seek(0); f.truncate(); f.write(str(os.getpid())); f.flush()
+    return f
+
+
+def claude_pid_of(pid, ps=None):
+    ps = ps or _ps
+    for _ in range(12):
+        out = ps(pid, "ppid=,comm=")
+        if len(out) < 2:
+            return None
+        ppid, comm = out[0], out[1]
+        if os.path.basename(comm) == "claude":
+            return int(pid)
+        if ppid in ("0", "1"):
+            return None
+        pid = ppid
+    return None
+
+
+def notify_mac(title, msg):
+    """Post a macOS banner. Fire and forget."""
+    q = lambda t: t.replace("\\", "\\\\").replace('"', '\\"')
+    subprocess.Popen(["osascript", "-e",
+                      f'display notification "{q(msg)}" with title "{q(title)}"'],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def attention_message(session):
+    """(title, body) for a banner about a session that needs attention."""
+    title = f"{display_label(session)} ({session.get('color_name', 'grey')})"
+    word = "needs permission" if session.get("status") == "permission" else "needs input"
+    return title, f"{word}: {session.get('task') or ''}".rstrip(": ")
+
+
+def is_alive(pid):
+    if not pid:
+        return False
+    try:
+        os.kill(int(pid), 0)
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def _num(v):
+    try:
+        return float(v or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def sort_sessions(sessions):
+    return sorted(
+        sessions,
+        key=lambda s: (0 if s.get("status") in ATTENTION else 1, -_num(s.get("updated"))))
+
+
+def is_stale(session, now, alive=is_alive):
+    if not session.get("pid") or not alive(session.get("pid")):
+        return True
+    return now - _num(session.get("updated")) > MAX_AGE_S
+
+
+def _sweep_temp_files(sessions_dir, now):
+    try:
+        names = os.listdir(sessions_dir)
+    except FileNotFoundError:
+        return
+    for n in names:
+        if n.endswith(".tmp"):
+            p = os.path.join(sessions_dir, n)
+            try:
+                if now - os.path.getmtime(p) > 60:
+                    os.remove(p)
+            except OSError:
+                pass
+
+
+def cleanup(sessions_dir, now=None, alive=is_alive):
+    now = time.time() if now is None else now
+    _sweep_temp_files(sessions_dir, now)
+    keep = []
+    for s in load_sessions(sessions_dir):
+        if is_stale(s, now, alive):
+            delete_session(sessions_dir, s["session_id"])
+        else:
+            keep.append(s)
+    return sort_sessions(keep)
+
+
+# ---- mirroring Claude Code's own session records ----
+# Claude Code keeps ~/.claude/sessions/<pid>.json with {pid, sessionId, cwd,
+# status: busy|idle|shell}. Sessions that have not fired one of our hooks yet
+# (started before the hooks were installed, or idle since) are mirrored from
+# there so the widget still shows every terminal. A hook-written file
+# (source == "hook") always wins.
+
+CLAUDE_SESSIONS_DIR = os.path.join(HOME, ".claude", "sessions")
+CLAUDE_PROJECTS_DIR = os.path.join(HOME, ".claude", "projects")
+MIRROR_STATUS = {"busy": "working", "idle": "idle", "shell": "idle"}
+
+# Tools that leave Claude waiting on something other than the user.
+ARMING_TOOLS = {"Monitor": "a watcher", "ScheduleWakeup": "a timer", "CronCreate": "a timer",
+                "Agent": "a subagent", "Workflow": "a workflow", "Bash": "a background job"}
+
+
+def armed_by_tool(name, inp):
+    """What a tool use leaves Claude waiting on, or None."""
+    inp = inp or {}
+    if name not in ARMING_TOOLS:
+        return None
+    if name == "Bash" and not inp.get("run_in_background"):
+        return None
+    if name == "ScheduleWakeup" and inp.get("stop"):
+        return None
+    return ARMING_TOOLS[name]
+
+
+def find_transcript(session_id, projects_dir=CLAUDE_PROJECTS_DIR):
+    import glob
+    hits = glob.glob(os.path.join(projects_dir, "*", session_id + ".jsonl"))
+    return hits[0] if hits else None
+
+
+def title_in_transcript(path, chunk=262144, max_bytes=8 * 1024 * 1024):
+    """Latest {"type":"ai-title","aiTitle":...} record, searching back from the end."""
+    try:
+        size = os.path.getsize(path)
+        with open(path, "rb") as f:
+            end = size
+            while end > 0 and size - end < max_bytes:
+                start = max(0, end - chunk)
+                f.seek(start)
+                data = f.read(end - start)
+                lines = data.decode("utf-8", "replace").splitlines()
+                if start > 0:
+                    lines = lines[1:]
+                for line in reversed(lines):
+                    if '"ai-title"' not in line:
+                        continue
+                    try:
+                        d = json.loads(line)
+                    except Exception:
+                        continue
+                    if d.get("type") == "ai-title":
+                        t = (d.get("aiTitle") or "").strip()
+                        if t:
+                            return t
+                        return None
+                end = start
+    except OSError:
+        return None
+    return None
+
+
+def refresh_titles(sessions_dir, projects_dir=CLAUDE_PROJECTS_DIR):
+    """Pull each session's AI title from its transcript when the transcript changed."""
+    for s in load_sessions(sessions_dir):
+        tr = find_transcript(s["session_id"], projects_dir)
+        if not tr:
+            continue
+        try:
+            mtime = os.path.getmtime(tr)
+        except OSError:
+            continue
+        if s.get("title_mtime") == mtime:
+            continue
+        title = title_in_transcript(tr)
+        update_session_fn(sessions_dir, s["session_id"],
+                          lambda cur: {"title": title, "title_mtime": mtime}, touch=False)
+
+
+def armed_in_transcript(path, tail_bytes=262144):
+    """Scan the last turn of a transcript. Returns what Claude is waiting on, or None.
+    A turn starts at any user message that is not just tool results (a prompt,
+    or the notification that a watcher fired)."""
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            f.seek(max(0, size - tail_bytes))
+            data = f.read()
+    except OSError:
+        return None
+    lines = data.decode("utf-8", "replace").splitlines()
+    if size > tail_bytes:
+        lines = lines[1:]                     # drop the partial first line
+    armed = None
+    for line in lines:
+        try:
+            d = json.loads(line)
+        except Exception:
+            continue
+        if not isinstance(d, dict):
+            continue
+        content = (d.get("message") or {}).get("content") if isinstance(d.get("message"), dict) else None
+        if d.get("type") == "user":
+            if isinstance(content, list) and content and all(
+                    isinstance(b, dict) and b.get("type") == "tool_result" for b in content):
+                continue
+            armed = None                      # a new turn begins
+        elif d.get("type") == "assistant" and isinstance(content, list):
+            for b in content:
+                if isinstance(b, dict) and b.get("type") == "tool_use":
+                    armed = armed_by_tool(b.get("name"), b.get("input")) or armed
+    return armed
+
+
+def _mirror_status(rec_status, sid, ours, projects_dir):
+    """(status, armed, transcript_mtime) for a mirrored session."""
+    status = MIRROR_STATUS.get(rec_status, "idle")
+    if status == "working":
+        return status, None, None
+    tr = find_transcript(sid, projects_dir)
+    try:
+        mtime = os.path.getmtime(tr) if tr else None
+    except OSError:
+        mtime = None
+    if ours and ours.get("transcript_mtime") == mtime and mtime is not None:
+        armed = ours.get("armed")
+    else:
+        armed = armed_in_transcript(tr) if tr else None
+    return ("watching" if armed else "idle"), armed, mtime
+
+
+def mirror_claude_sessions(claude_dir, sessions_dir, tint_dir=TINT_DIR,
+                           alive=is_alive, tty_of=tty_of_pid, projects_dir=CLAUDE_PROJECTS_DIR):
+    """Seed/update mirror sessions. Returns sessions that just became needs_input."""
+    newly_attention = []
+    try:
+        names = os.listdir(claude_dir)
+    except FileNotFoundError:
+        return newly_attention
+    for name in names:
+        if not name.endswith(".json"):
+            continue
+        rec = _read_json(os.path.join(claude_dir, name))
+        if not rec or not rec.get("sessionId") or not rec.get("pid"):
+            continue
+        pid, sid = rec["pid"], rec["sessionId"]
+        if not alive(pid):
+            continue
+        ours = load_session(sessions_dir, sid)
+        if ours is not None and ours.get("source") != "mirror":
+            continue
+        status, armed, mtime = _mirror_status(rec.get("status"), sid, ours, projects_dir)
+        if ours is None:
+            tty = tty_of(pid)
+            color, cname = read_tint(tint_dir, tty)
+            cwd = rec.get("cwd") or ""
+            data = {
+                "session_id": sid, "pid": pid, "tty": tty, "color": color,
+                "color_name": cname, "cwd": cwd,
+                "label": os.path.basename(cwd.rstrip("/")) or cwd or "?",
+                "task": rec.get("name") or "", "status": status, "source": "mirror",
+                "armed": armed, "transcript_mtime": mtime, "updated": time.time()}
+            write_session(sessions_dir, {k: v for k, v in data.items() if v is not None})
+            continue
+        was = ours.get("status")
+        if status == "idle" and was in ("working", "watching", "needs_input"):
+            status = "needs_input"            # it was doing something and has now stopped
+        changed = (status != was or armed != ours.get("armed")
+                   or mtime != ours.get("transcript_mtime"))
+        if changed:
+            _, new = update_session(sessions_dir, sid, status=status, armed=armed,
+                                    transcript_mtime=mtime)
+            if status == "needs_input" and was != "needs_input":
+                newly_attention.append(new)
+    return newly_attention
