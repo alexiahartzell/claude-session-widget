@@ -349,7 +349,7 @@ class Widget:
             self.handle_attention(sessions)
             self.handle_empty(sessions)
             self.mode = w.effective_mode()
-            key = [self.mode, w.mute_until() > time.time() and int(w.mute_until() // 60)] + [(s["session_id"], s.get("status"), s.get("armed"), w.display_label(s),
+            key = [self.mode, w.mute_until() > time.time() and int(w.mute_until() // 60)] + [(s["session_id"], s.get("status"), w.subtitle(s), w.display_label(s),
                                   s.get("title"), s.get("task"), s.get("activity"), s.get("color"),
                                   w.project_tag(s), w.elapsed_text(s),
                                   w.agents_text(s.get("agents"))) for s in sessions]

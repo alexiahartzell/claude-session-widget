@@ -117,8 +117,10 @@ def subtitle(session):
     on while it works, what it waits on while watching, and nothing when it is
     your turn or idle. The title above says what the session is about."""
     status = session.get("status")
-    if status == "watching" and session.get("armed"):
-        return f"waiting on {session['armed']}"
+    waiting = session.get("armed") or session.get("background")
+    if status == "watching" and waiting:
+        # Both are true: you can reply, and Claude resumes on its own when it ends.
+        return f"your turn · waiting on {waiting}"
     if status in ("working", "permission"):
         return session.get("activity") or (session.get("task") or "").strip()
     return ""
@@ -157,7 +159,8 @@ def reconcile(session, state, held_s):
     """Fields that bring a card in line with the tab's spinner, or None."""
     status = session.get("status")
     if state == "idle" and held_s >= IDLE_HOLD_S and status == "working":
-        return {"status": "watching"} if session.get("armed") else {"status": "needs_input"}
+        waiting = session.get("armed") or session.get("background")
+        return {"status": "watching"} if waiting else {"status": "needs_input"}
     if state == "busy" and held_s >= BUSY_HOLD_S:
         if status in ("idle", "needs_input", "watching"):
             # Keep "armed": a busy tab while watching can be a blocked Stop resuming the
@@ -713,6 +716,29 @@ def armed_by_tool(name, inp):
     if name == "ScheduleWakeup" and inp.get("stop"):
         return None
     return ARMING_TOOLS[name]
+
+
+# Stop payloads list in-flight background work and scheduled wakeups. That
+# covers work from earlier turns too, which "armed" (this turn only) misses.
+TASK_TYPES = {"shell": ("a background job", "background jobs"), "subagent": ("a subagent", "subagents"),
+              "monitor": ("a watcher", "watchers"), "workflow": ("a workflow", "workflows")}
+
+
+def waiting_from_stop(payload):
+    """(known, label). known is False when the payload has no background lists
+    (older Claude Code). label names what Claude waits on, or is None."""
+    if "background_tasks" not in payload and "session_crons" not in payload:
+        return False, None
+    tasks = [t for t in payload.get("background_tasks") or [] if isinstance(t, dict)]
+    crons = payload.get("session_crons") or []
+    if tasks:
+        kinds = {t.get("type") for t in tasks}
+        one, many = (TASK_TYPES.get(kinds.pop(), ("background work", "background tasks"))
+                     if len(kinds) == 1 else ("background work", "background tasks"))
+        return True, one if len(tasks) == 1 else f"{len(tasks)} {many}"
+    if crons:
+        return True, "a timer"
+    return True, None
 
 
 def find_transcript(session_id, projects_dir=CLAUDE_PROJECTS_DIR):

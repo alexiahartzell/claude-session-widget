@@ -323,8 +323,8 @@ def test_single_instance_lock(tmp_path):
 
 
 def test_subtitle_while_watching_names_what_it_waits_on():
-    assert w.subtitle({"status": "watching", "armed": "a watcher", "task": "run the calc"}) == "waiting on a watcher"
-    assert w.subtitle({"status": "watching", "armed": "a subagent", "task": ""}) == "waiting on a subagent"
+    assert w.subtitle({"status": "watching", "armed": "a watcher", "task": "run the calc"}) == "your turn · waiting on a watcher"
+    assert w.subtitle({"status": "watching", "armed": "a subagent", "task": ""}) == "your turn · waiting on a subagent"
 
 
 # ---- reading armed watchers out of a mirrored session's transcript ----
@@ -758,3 +758,16 @@ def test_newer_install_ignores_dev_checkouts_and_bad_files(tmp_path):
     missing = tmp_path / "gone"
     reg.write_text(json.dumps({"plugins": {"session-widget@session-widget": [{"installPath": str(missing)}]}}))
     assert w.newer_install(str(reg), str(new)) is None
+
+
+def test_waiting_from_stop_labels():
+    t = lambda ty: {"id": "x", "type": ty, "status": "running", "description": ""}
+    assert w.waiting_from_stop({}) == (False, None)
+    assert w.waiting_from_stop({"background_tasks": [], "session_crons": []}) == (True, None)
+    assert w.waiting_from_stop({"background_tasks": [t("shell")]}) == (True, "a background job")
+    assert w.waiting_from_stop({"background_tasks": [t("subagent")]}) == (True, "a subagent")
+    assert w.waiting_from_stop({"background_tasks": [t("monitor")]}) == (True, "a watcher")
+    assert w.waiting_from_stop({"background_tasks": [t("shell"), t("shell")]}) == (True, "2 background jobs")
+    assert w.waiting_from_stop({"background_tasks": [t("shell"), t("subagent")]}) == (True, "2 background tasks")
+    assert w.waiting_from_stop({"background_tasks": [t("dream")]}) == (True, "background work")
+    assert w.waiting_from_stop({"background_tasks": [], "session_crons": [{"id": "c"}]}) == (True, "a timer")
