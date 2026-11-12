@@ -180,7 +180,9 @@ def headless_claude(pid):
 
 def claude_ttys():
     try:
-        pids = subprocess.check_output(["pgrep", "-x", "claude"], text=True).split()
+        # -a: macOS pgrep skips its own ancestors by default, which would hide
+        # the Claude session that runs this very command.
+        pids = subprocess.check_output(["pgrep", "-a", "-x", "claude"], text=True).split()
     except subprocess.CalledProcessError:
         return set()
     return {t for t in (tty_of_pid(p) for p in pids) if t}
