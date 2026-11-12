@@ -27,25 +27,25 @@ STATE_DIR = w.TINT_DIR
 # Each scheme lists its dark tab backgrounds as (name, hex). The light mode of a
 # scheme uses the same hues as soft light backgrounds, made by light_of().
 DARK = {
-    # Dark, quiet backgrounds.
+    # Soft, greyish colours from every part of the rainbow. The default.
     "muted": [
-        ("midnight", "172128"), ("plum", "20132c"), ("forest", "11261b"), ("wine", "2b121b"), ("teal", "182e2c"),
-        ("espresso", "312b20"), ("indigo", "131624"), ("moss", "232713"), ("rust", "2b1814"), ("mulberry", "30202f"),
+        ("mulberry", "2d2026"), ("forest", "162e26"), ("wine", "261111"), ("teal", "1a272a"), ("rust", "241e1a"),
+        ("midnight", "141d2c"), ("espresso", "2f301a"), ("indigo", "111126"), ("moss", "132a14"), ("plum", "251123"),
     ],
-    # Deeper, more saturated colours that are easy to tell apart.
+    # Deep, rich colours from every part of the rainbow.
     "jewel": [
-        ("sapphire", "042242"), ("emerald", "073828"), ("ruby", "40060e"), ("amethyst", "0d0239"), ("amber", "3b370e"),
-        ("turquoise", "113c42"), ("jade", "083905"), ("violet", "370b39"), ("copper", "462c12"), ("magenta", "410f29"),
+        ("magenta", "470926"), ("emerald", "0f3e2c"), ("ruby", "390001"), ("turquoise", "033643"), ("copper", "4a3312"),
+        ("sapphire", "0c1e40"), ("amber", "3e3f00"), ("amethyst", "020138"), ("jade", "023905"), ("violet", "380035"),
     ],
-    # Twilight purples and roses, with sunset orange and amber.
+    # Only purples, lilacs, mauves and dusty roses.
     "dusk": [
-        ("twilight", "22273e"), ("orchid", "281d2f"), ("rosewood", "301316"), ("lagoon", "162831"), ("heather", "1b1736"),
-        ("sunset", "332019"), ("mauve", "33152a"), ("amber", "2d2614"), ("aubergine", "2c1331"), ("cerise", "3e232f"),
+        ("twilight", "141629"), ("aubergine", "3b1835"), ("evening", "12122d"), ("mauve", "3c2935"), ("heather", "333242"),
+        ("plum", "2c121e"), ("lavender", "241b29"), ("rosewood", "402d30"), ("orchid", "24132b"), ("cerise", "39171c"),
     ],
-    # Sea blues and teals, with coral, sand, kelp and urchin.
+    # Only sea greens, teals and blues, from shallows to the deep.
     "ocean": [
-        ("abyss", "14273c"), ("shallows", "08342e"), ("coral", "3c130b"), ("kelp", "212f07"), ("deep", "121633"),
-        ("sand", "362a09"), ("urchin", "22062d"), ("seaglass", "092e18"), ("anemone", "311126"), ("reef", "112b31"),
+        ("kelp", "062817"), ("reef", "243747"), ("seaglass", "24473c"), ("current", "0f2a46"), ("lagoon", "03231a"),
+        ("harbour", "111321"), ("shallows", "042120"), ("abyss", "11143d"), ("tide", "011e26"), ("deep", "000239"),
     ],
     # Ten hues picked by simulating protanopia, deuteranopia and tritanopia, so
     # every pair of card colours stays as different as ten colours allow for each.
@@ -53,55 +53,55 @@ DARK = {
         ("cinnabar", "460c19"), ("copper", "3f2816"), ("amber", "37350a"), ("brass", "2a3422"), ("jade", "173a29"),
         ("lagoon", "222e39"), ("harbour", "26253a"), ("indigo", "23103f"), ("orchid", "4b0e36"), ("raspberry", "463b40"),
     ],
-    # Pines, mosses, bark and mushrooms.
+    # Only greens and woody browns.
     "forest": [
-        ("pine", "162922"), ("fern", "182b0e"), ("moss", "1e2615"), ("bark", "22110b"), ("lichen", "322e12"),
-        ("spruce", "162e2f"), ("bramble", "341b2b"), ("acorn", "231b12"), ("canopy", "0d2416"), ("mushroom", "271416"),
+        ("bark", "371908"), ("fern", "1f2906"), ("acorn", "2c241c"), ("canopy", "142314"), ("lichen", "2d1f07"),
+        ("pine", "062606"), ("moss", "201e06"), ("spruce", "08382b"), ("olive", "343723"), ("juniper", "182523"),
     ],
-    # Fire reds, flame oranges, coal and smoke.
+    # Only fire colours: reds, oranges and golds.
     "ember": [
-        ("ember", "370703"), ("flame", "381c05"), ("ash", "423906"), ("coal", "3a0d1d"), ("glow", "3c3f02"),
-        ("cinder", "380b12"), ("smoke", "240340"), ("brick", "471e13"), ("garnet", "40102d"), ("sienna", "3f2d0b"),
+        ("garnet", "290410"), ("sienna", "2e1d15"), ("cinder", "2f151e"), ("blaze", "2c1500"), ("ember", "4a2224"),
+        ("amber", "2c1d00"), ("brick", "290304"), ("glow", "474020"), ("flame", "4a1909"), ("gold", "292301"),
     ],
-    # Northern-lights greens, glacier blues and violets.
+    # Only northern-lights colours: greens, teals, blues and violets.
     "aurora": [
-        ("borealis", "123922"), ("glacier", "0e333c"), ("polar", "0b1a3e"), ("nebula", "1a0834"), ("solar", "430d2b"),
-        ("spectre", "113632"), ("violet", "381039"), ("ice", "112336"), ("verdant", "073307"), ("magenta", "330e13"),
+        ("verdant", "052e02"), ("ice", "0b2647"), ("borealis", "142b18"), ("polar", "03022d"), ("jade", "033b2f"),
+        ("indigo", "181534"), ("spectre", "0b292d"), ("nebula", "22032b"), ("glacier", "152430"), ("violet", "462047"),
     ],
-    # Sand, terracotta, sage and canyon reds.
+    # Only soft earth colours: sand, clay, terracotta and sage.
     "desert": [
-        ("sand", "312e22"), ("terracotta", "351a19"), ("sage", "2c3b23"), ("clay", "3b2a1c"), ("mesa", "2e2021"),
-        ("cactus", "21372c"), ("dune", "373619"), ("canyon", "321921"), ("oasis", "1b2e2d"), ("twilight", "251c2c"),
+        ("canyon", "261413"), ("sand", "2f2b18"), ("mesa", "2a1f1f"), ("dune", "212613"), ("terracotta", "3d291f"),
+        ("wheat", "393e32"), ("clay", "261d13"), ("sage", "1a2814"), ("adobe", "423b31"), ("yucca", "31422c"),
     ],
-    # Plums, raspberries, blueberries and cherries.
+    # Only berry colours: blues, purples, magentas and reds.
     "berry": [
-        ("plum", "2f092f"), ("raspberry", "3c151b"), ("blackberry", "140c39"), ("currant", "2d0b0a"), ("blueberry", "152437"),
-        ("cherry", "2e1912"), ("grape", "2d173d"), ("elderberry", "34152d"), ("cranberry", "2f0d1d"), ("bilberry", "161c3d"),
+        ("blueberry", "05182d"), ("elderberry", "2a0338"), ("bilberry", "121c26"), ("boysenberry", "300229"), ("blackberry", "04112e"),
+        ("raspberry", "3c1c2d"), ("grape", "03032b"), ("cranberry", "261112"), ("plum", "311e3b"), ("currant", "280303"),
     ],
-    # Fjord blues, frost, pine and birch.
+    # Only cool greys with a hint of blue or green.
     "nordic": [
-        ("fjord", "273540"), ("slate", "202330"), ("frost", "2b3335"), ("pine", "274033"), ("granite", "362d28"),
-        ("aurora", "1d302d"), ("heather", "392d3b"), ("birch", "38382f"), ("tundra", "2a3422"), ("steel", "29253d"),
+        ("lichen", "1c2926"), ("harbour", "2e3447"), ("frost", "404443"), ("slate", "424347"), ("ice", "2d4246"),
+        ("steel", "2b2b2e"), ("fjord", "303233"), ("storm", "272438"), ("mist", "1c252b"), ("heather", "232129"),
     ],
-    # Rust, ochre, olive, maroon and pumpkin.
+    # Only autumn leaves: maroon, rust, pumpkin, ochre and olive.
     "autumn": [
-        ("rust", "2e0909"), ("ochre", "372c15"), ("olive", "232c09"), ("maroon", "341220"), ("pumpkin", "341b12"),
-        ("chestnut", "2d1013"), ("harvest", "2f2c08"), ("cider", "281908"), ("hazel", "15280b"), ("plum", "2d102b"),
+        ("maroon", "2a0505"), ("ochre", "211a05"), ("chestnut", "210e0d"), ("mustard", "3b341d"), ("rust", "3b231d"),
+        ("harvest", "2d2d08"), ("pumpkin", "281205"), ("olive", "222714"), ("cider", "362310"), ("hazel", "212e06"),
     ],
-    # Bright, saturated electric colours. The easiest to tell apart.
+    # Only bright synthwave colours: cyans, blues, violets and pinks.
     "neon": [
-        ("cyber", "002c41"), ("laser", "46063f"), ("volt", "2a4200"), ("ultra", "190041"), ("blaze", "431600"),
-        ("acid", "433400"), ("electric", "09204f"), ("toxic", "004c28"), ("hot", "4f0921"), ("radium", "004341"),
+        ("radium", "003f30"), ("laser", "02023e"), ("cyber", "023c3d"), ("magenta", "32003d"), ("electric", "063c4f"),
+        ("hot", "450537"), ("ultra", "04284d"), ("plasma", "4f0424"), ("violet", "081847"), ("pulse", "41000b"),
     ],
-    # Deep space blues, nebula pinks and violets.
+    # Only deep night-sky blues and violets.
     "galaxy": [
-        ("void", "141e36"), ("nebula", "2a1426"), ("comet", "183737"), ("quasar", "150b2c"), ("stardust", "330e1d"),
-        ("orion", "12242e"), ("pulsar", "0c3324"), ("supernova", "290a0a"), ("cosmos", "1e152c"), ("zenith", "260928"),
+        ("comet", "0a2128"), ("quasar", "1c1827"), ("orion", "061626"), ("eclipse", "1c1228"), ("void", "12181f"),
+        ("nebula", "1d0629"), ("sirius", "081329"), ("zenith", "2c1b2e"), ("cosmos", "070a27"), ("stardust", "200720"),
     ],
-    # Coral, mango, lime, lagoon and hibiscus.
+    # Only tropical colours: pinks, corals, mangos and lagoon blues.
     "tropical": [
-        ("coral", "46070d"), ("mango", "3f3305"), ("lime", "2b3a02"), ("lagoon", "06303a"), ("hibiscus", "400526"),
-        ("palm", "04411c"), ("lapis", "04143a"), ("orchid", "3a0f43"), ("papaya", "371e06"), ("reef", "083832"),
+        ("hibiscus", "4d0926"), ("pineapple", "003a0f"), ("flamingo", "47070c"), ("palm", "174d2e"), ("coral", "381a01"),
+        ("reef", "023832"), ("papaya", "413413"), ("lagoon", "14494f"), ("mango", "40410a"), ("cove", "062a3a"),
     ],
 }
 PALETTE_SIZE = 10                                # every scheme has this many colours

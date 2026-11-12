@@ -125,25 +125,25 @@ There are fifteen colour schemes, and each comes in a dark and a light version. 
 
 | Scheme | Colours | Feel |
 | --- | --- | --- |
-| **muted** | 10 | Quiet, low-saturation colours. The default. |
-| **jewel** | 10 | Richer sapphires, emeralds and rubies that are easy to tell apart. |
-| **dusk** | 10 | Twilight purples and roses, with sunset orange and amber. |
-| **ocean** | 10 | Sea blues and teals, with coral, sand, kelp and urchin. |
-| **colourblind** | 10 | Warm reds and golds, jade, blues, indigo and pinks. |
-| **forest** | 10 | Pines, mosses, bark and mushrooms. |
-| **ember** | 10 | Fire reds, flame oranges, coal and smoke. |
-| **aurora** | 10 | Northern-lights greens, glacier blues and violets. |
-| **desert** | 10 | Sand, terracotta, sage and canyon reds. |
-| **berry** | 10 | Plums, raspberries, blueberries and cherries. |
-| **nordic** | 10 | Fjord blues, frost, pine and birch. |
-| **autumn** | 10 | Rust, ochre, olive, maroon and pumpkin. |
-| **neon** | 10 | Bright, saturated electric colours. The easiest to tell apart. |
-| **galaxy** | 10 | Deep space blues, nebula pinks and violets. |
-| **tropical** | 10 | Coral, mango, lime, lagoon and hibiscus. |
+| **muted** | 10 | Soft, greyish colours from every part of the rainbow. The default. |
+| **jewel** | 10 | Deep, rich colours from every part of the rainbow. |
+| **dusk** | 10 | Only purples, lilacs, mauves and dusty roses. |
+| **ocean** | 10 | Only sea greens, teals and blues, from shallows to the deep. |
+| **colourblind** | 10 | Colours picked to stay distinct for protanopia, deuteranopia and tritanopia. |
+| **forest** | 10 | Only greens and woody browns. |
+| **ember** | 10 | Only fire colours: reds, oranges and golds. |
+| **aurora** | 10 | Only northern-lights colours: greens, teals, blues and violets. |
+| **desert** | 10 | Only soft earth colours: sand, clay, terracotta and sage. |
+| **berry** | 10 | Only berry colours: blues, purples, magentas and reds. |
+| **nordic** | 10 | Only cool greys with a hint of blue or green. |
+| **autumn** | 10 | Only autumn leaves: maroon, rust, pumpkin, ochre and olive. |
+| **neon** | 10 | Only bright synthwave colours: cyans, blues, violets and pinks. |
+| **galaxy** | 10 | Only deep night-sky blues and violets. |
+| **tropical** | 10 | Only tropical colours: pinks, corals, mangos and lagoon blues. |
 
 **Every scheme has ten colours**, so ten tabs can be open before any colour repeats.
 
-**Schemes differ in strength as well as hue.** Cards and outlines keep each tab colour's own saturation and depth. So muted and nordic stay soft and greyish, while jewel, tropical and neon are vivid. A test checks that every pair of cards in every scheme stays clearly different in both light and dark mode.
+**Each themed scheme stays inside its own colours.** Ocean is only blues and teals, ember only reds and oranges, nordic only cool greys. Cards in a scheme are told apart by lightness and strength as well as hue, because cards and outlines keep each tab colour's own saturation and depth. Muted, jewel and colourblind span the whole rainbow for the most contrast. A test checks that every pair of cards in every scheme stays clearly different in both light and dark mode.
 
 **The colourblind scheme was chosen by simulation.** Its colours were picked so that every pair of cards stays as different as possible under simulated protanopia, deuteranopia and tritanopia. A test in the suite checks this, so it stays true if the colours are ever edited.
 
