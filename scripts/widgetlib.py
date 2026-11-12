@@ -897,17 +897,15 @@ def mirror_claude_sessions(claude_dir, sessions_dir, tint_dir=TINT_DIR,
 
 
 # ---- the pet: a small creature on each card that acts out the status ----
-# Three to choose from, like picking a starter, all from quantum physics:
-# Schrodinger's cat in its box, a photon as a little star of light, and a qubit on its Bloch
-# sphere. Each is a list of shapes on a 24 x 24 grid, so the widget (Tk) and a
-# preview (Pillow) draw exactly the same thing. Roles pick the colour: body
-# takes the card's accent, the rest are fixed or derived from it.
+# Three fantasy starters to choose from: a baby dragon, a slime and a wisp.
+# Each is a list of shapes on a 24 x 24 grid, so the widget (Tk) and a preview
+# (Pillow) draw exactly the same thing. Roles pick the colour: body takes the
+# card's accent, the rest are fixed or derived from it.
 
-PETS = ("cat", "photon", "qubit")
+PETS = ("dragon", "slime", "wisp")
 PET_GRID = 24
 PET_MARK = {"idle": "z", "needs_input": "!", "permission": "?"}
-PET_COLOURS = {"dark": "24242e", "white": "ffffff", "box": "c8955a", "boxdark": "8f6337",
-               "arrow": "ffd166"}
+PET_COLOURS = {"dark": "24242e", "white": "ffffff", "fire": "ff9a3c", "horn": "f3e3c3"}
 
 
 def _eyes(out, cx, cy, gap, r, status, look):
@@ -919,71 +917,91 @@ def _eyes(out, cx, cy, gap, r, status, look):
             out.append(("oval", (ex - 0.65 * r, cy - 0.9 * r, ex - 0.05 * r, cy - 0.25 * r), "white"))
 
 
-def _cat(out, status, f, look):
-    """Schrodinger's cat: asleep in a shut box, peeking while watching,
-    popping out when it needs you, bobbing at the rim while working."""
-    rim = 13.5
-    peek = {"working": 4.5 if f else 5.5, "watching": 2.2, "needs_input": 8 if f else 6.5,
-            "permission": 8 if f else 6.5}.get(status, 0)
-    if peek:
-        cy = rim - peek + 3.2
-        for sx in (1, -1):
-            ex = 12 - sx * 5.2
-            out.append(("poly", (ex - sx * 2.2, cy - 2.6, ex - sx * 0.8, cy - 8.6, ex + sx * 3, cy - 4.6), "body"))
-            out.append(("poly", (ex - sx * 1.3, cy - 4, ex - sx * 0.85, cy - 6.9, ex + sx * 1.1, cy - 4.9), "blush"))
-        out.append(("oval", (5, cy - 5.6, 19, cy + 5), "body"))
-        _eyes(out, 12, cy - 1, 3.1, 1.3, status, look)
-        out.append(("poly", (11.3, cy + 1.2, 12.7, cy + 1.2, 12, cy + 2), "dark"))
-        if status == "working":                    # paws on the rim
-            for px in (8, 16):
-                out.append(("oval", (px - 1.6, rim - 1.3, px + 1.6, rim + 0.9), "light"))
-    out.append(("poly", (3, rim, 21, rim, 21, 22.5, 3, 22.5), "box"))
-    out.append(("line", (3, rim + 3.2, 21, rim + 3.2), "boxdark", 0.6))
-    if not peek:                                   # shut lid, flaps resting
-        out.append(("poly", (3, rim, 12, rim, 10.5, rim - 2.6 - (0.4 if f else 0), 2, rim - 2), "boxdark"))
-        out.append(("poly", (21, rim, 12, rim, 13.5, rim - 2.6 - (0.4 if f else 0), 22, rim - 2), "box"))
-    else:                                          # flaps open
-        out.append(("poly", (3, rim, 0.6, rim - 4.5, 2.2, rim - 5, 4.4, rim), "boxdark"))
-        out.append(("poly", (21, rim, 23.4, rim - 4.5, 21.8, rim - 5, 19.6, rim), "boxdark"))
+def _hop(status, f):
+    return {"needs_input": -1.8 if f else 0, "permission": -1.8 if f else 0,
+            "working": -0.8 if f else 0}.get(status, 0)
 
 
-def _photon(out, status, f, look):
-    """A photon: a little star of light. Its rays turn while working, it
-    flares when it needs you, and dims to a soft glow asleep."""
-    flare = {"needs_input": 1.6 if f else 0.8, "permission": 1.6 if f else 0.8, "idle": -1.6}.get(status, 0)
-    turn = {"working": math.pi / 8 if f else 0, "watching": math.pi / 16 if f else 0}.get(status, 0)
-    if status != "idle":                            # soft halo
-        out.append(("oval", (12 - 10.5 - flare / 2, 13 - 10.5 - flare / 2, 12 + 10.5 + flare / 2, 13 + 10.5 + flare / 2), "halo"))
-    pts = []
-    for k in range(16):                             # an eight-pointed star
-        r = (9.5 + flare) if k % 2 == 0 else 5.6
-        a = turn + k * math.pi / 8 - math.pi / 2
-        pts += [12 + r * math.cos(a), 13 + r * math.sin(a)]
-    out.append(("poly", tuple(pts), "body"))
-    out.append(("oval", (6.2, 7.2, 17.8, 18.8), "body"))
-    out.append(("oval", (8, 8.4, 11.5, 10.8), "light"))
-    _eyes(out, 12, 13.2, 2.6, 1.2, status, look)
-    out.append(("oval", (7.6, 14.9, 9.6, 16), "blush"))
-    out.append(("oval", (14.4, 14.9, 16.4, 16), "blush"))
+def _dragon(out, status, f, look):
+    """A baby dragon: wings flap while working, a puff of fire when it needs
+    you, curled up asleep with its wings folded."""
+    lift = _hop(status, f)
+    cy = 14.5 + lift
+    up = status in ("working", "needs_input", "permission") and f
+    for sx in (1, -1):                              # wings behind the body
+        wx = 12 + sx * 6.5
+        tip = (wx + sx * 5.2, cy - (8.5 if up else 4.5))
+        if status == "idle":
+            tip = (wx + sx * 3, cy - 2)
+        out.append(("poly", (wx, cy - 3.5, tip[0], tip[1], wx + sx * 4, cy + 1, wx + sx * 1, cy + 2), "shade"))
+    out.append(("poly", (17.5, cy + 5, 22.5, cy + 6.5 - (1 if f else 0), 21.4, cy + 4, 18, cy + 3), "body"))  # tail
+    for sx in (1, -1):                              # horns
+        hx = 12 + sx * 3.4
+        out.append(("poly", (hx - sx * 1.2, cy - 5.2, hx + sx * 0.6, cy - 9.2, hx + sx * 1.6, cy - 5), "horn"))
+    out.append(("oval", (5, cy - 6.5, 19, cy + 7), "body"))
+    out.append(("oval", (8.4, cy - 0.5, 15.6, cy + 6.6), "light"))            # belly
+    for k in range(3):
+        out.append(("line", (9.6, cy + 1.4 + 1.6 * k, 14.4, cy + 1.4 + 1.6 * k), "shade", 0.5))
+    _eyes(out, 12, cy - 2.4, 3.1, 1.35, status, look)
+    out.append(("oval", (10.6, cy + 0.2, 11.3, cy + 0.8), "dark"))             # nostrils
+    out.append(("oval", (12.7, cy + 0.2, 13.4, cy + 0.8), "dark"))
+    if status in ("needs_input", "permission"):     # a little puff of fire
+        r = 1.6 if f else 1.1
+        out.append(("oval", (3.2 - r, cy - 0.6 - r, 3.2 + r, cy - 0.6 + r), "fire"))
+        out.append(("oval", (1.2 - r / 2, cy - 2 - r / 2, 1.2 + r / 2, cy - 2 + r / 2), "fire"))
 
 
-def _qubit(out, status, f, look):
-    """A qubit on its Bloch sphere: the state arrow precesses while working,
-    points up when it needs you, rests down asleep."""
-    out.append(("oval", (3, 4, 21, 22), "body"))
-    out.append(("ring", (3, 10.4, 21, 15.6), "light", 0.7))       # equator
-    out.append(("oval", (5.2, 6, 10.5, 9.2), "light"))             # shine
-    theta = {"working": 0.95, "watching": 0.6, "needs_input": 0.08, "permission": 0.08,
-             "idle": math.pi - 0.75}.get(status, 0.6)
-    phi = {"working": 1.9 if f else 0.4, "watching": 2.4 if f else 0.7, "idle": 0.1}.get(status, 1.2)
-    if status in ("needs_input", "permission") and f:
-        theta = 0.25
-    tip = (12 + 8.2 * math.sin(theta) * math.cos(phi), 13 - 8.2 * math.cos(theta) + 2.4 * math.sin(theta) * math.sin(phi))
-    out.append(("line", (12, 13, tip[0], tip[1]), "arrow", 1.1))
-    out.append(("oval", (tip[0] - 1.3, tip[1] - 1.3, tip[0] + 1.3, tip[1] + 1.3), "arrow"))
-    _eyes(out, 12, 14.8, 3.2, 1.25, status, look)
+def _slime(out, status, f, look):
+    """A glossy slime: squashes and stretches while working, stretches tall
+    when it needs you, melts into a flat puddle asleep."""
+    base = 21.5
+    w_, h_ = {"working": (9.5, 9.5) if f else (10.5, 8),
+              "needs_input": (8.8, 10.6) if f else (9.6, 9.8),
+              "permission": (8.8, 10.6) if f else (9.6, 9.8),
+              "idle": (10.8, 6.6) if f else (10.5, 7)}.get(status, (9.8, 9.6))
+    top = base - 2 * h_
+    out.append(("oval", (12 - w_ - 0.6, base - 2.2, 12 + w_ + 0.6, base + 0.8), "shade"))   # puddle foot
+    out.append(("oval", (12 - w_, top, 12 + w_, base + 0.5), "body"))
+    out.append(("oval", (12 - w_ * 0.62, top + h_ * 0.18, 12 - w_ * 0.12, top + h_ * 0.55), "light"))  # gloss
+    out.append(("oval", (12 + w_ * 0.42, top + h_ * 0.35, 12 + w_ * 0.62, top + h_ * 0.6), "light"))
+    for bx, by, br in ((15.6, 0.55, 0.9), (8.2, 0.8, 0.6)):                    # bubbles inside
+        out.append(("ring", (bx - br, base - h_ * (1 - by) * 1.6 - br, bx + br, base - h_ * (1 - by) * 1.6 + br),
+                    "light", 0.5))
+    cy = top + h_ * 1.05
+    _eyes(out, 12, cy, 3.3, 1.4, status, look)
+    out.append(("oval", (6.2, cy + 2, 8.8, cy + 3.2), "blush"))
+    out.append(("oval", (15.2, cy + 2, 17.8, cy + 3.2), "blush"))
     if status != "idle":
-        out.append(("arc", (10.9, 16, 13.1, 18.2), "dark", 200, 140, 0.8))
+        out.append(("arc", (10.6, cy + 1, 13.4, cy + 3.6), "dark", 200, 140, 0.9))
+
+
+def _flame(cx, cy, a, b, sway, wobble):
+    """Points of a soft teardrop flame: tip at top, round base, tip swaying."""
+    pts = []
+    for k in range(36):
+        t = 2 * math.pi * k / 36
+        x = a * math.sin(t) * abs(math.sin(t / 2)) ** 0.8
+        y = -b * math.cos(t)
+        lean = ((b - y) / (2 * b)) ** 2                  # 1 at the tip, 0 at the base
+        x += sway * lean + wobble * math.sin(3 * t) * (1 - lean) * 0.4
+        pts += [cx + x, cy + y]
+    return tuple(pts)
+
+
+def _wisp(out, status, f, look):
+    """A will-o'-the-wisp: a floating flame spirit that flickers while working,
+    blazes up when it needs you and shrinks to an ember asleep."""
+    grow = {"needs_input": 1.6 if f else 0.8, "permission": 1.6 if f else 0.8, "idle": -2}.get(status, 0)
+    sway = {"working": 2.2 if f else -2.2, "watching": 1 if f else -1}.get(status, 0.6 if f else -0.6)
+    cy = 13.5 + (-0.8 if f else 0)
+    a, b = 7.2 + grow * 0.4, 8.6 + grow
+    if status != "idle":
+        out.append(("oval", (12 - a - 2.6, cy - b * 0.4 - 2.6, 12 + a + 2.6, min(cy + b + 1.4, 24)), "halo"))
+    out.append(("poly", _flame(12, cy, a, b, sway, 1 if f else -1), "body"))
+    out.append(("poly", _flame(12, cy + b * 0.25, a * 0.5, b * 0.62, sway * 0.7, 0), "light"))
+    _eyes(out, 12, cy + b * 0.42, 2.6, 1.2, status, look)
+    out.append(("oval", (7.4, cy + b * 0.62, 9.2, cy + b * 0.62 + 1), "blush"))
+    out.append(("oval", (14.8, cy + b * 0.62, 16.6, cy + b * 0.62 + 1), "blush"))
 
 
 def pet_shapes(kind, status, frame):
@@ -993,10 +1011,10 @@ def pet_shapes(kind, status, frame):
     f = frame % 2
     look = {"watching": -1.1 if f else 1.1, "working": 0.6}.get(status, 0)
     out = []
-    if status == "working":                          # speed lines that flicker
+    if status == "working" and kind != "wisp":      # speed lines that flicker
         for k, ln in enumerate((2.2, 1.4, 2.2) if f else (1.4, 2.2, 1.4)):
             out.append(("line", (0.3, 15 + 2.6 * k, 0.3 + ln, 15 + 2.6 * k), "light", 0.9))
-    {"cat": _cat, "photon": _photon}.get(kind, _qubit)(out, status, f, look)
+    {"dragon": _dragon, "slime": _slime}.get(kind, _wisp)(out, status, f, look)
     mark = PET_MARK.get(status)
     if mark:
         out.append(("mark", (19.5, 1 if (status != "idle" or f) else 3), mark))
@@ -1016,9 +1034,9 @@ def pet_colours(accent_hex, card_hex):
 
 def pet_kind(path=None):
     """The chosen pet, or None when pets are off."""
-    v = _config(path).get("pet", "cat")
-    if v is True or v in ("drop", "pebble", "kit", "sprout"):    # earlier pets
-        return "cat"
+    v = _config(path).get("pet", "dragon")
+    if v is True or v in ("drop", "pebble", "kit", "sprout", "cat", "photon", "qubit"):   # earlier pets
+        return "dragon"
     return v if v in PETS else None
 
 
