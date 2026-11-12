@@ -250,10 +250,24 @@ def test_tool_use_after_watching_means_claude_resumed(tmp_path):
     assert new["status"] == "needs_input" and len(calls) == 1
 
 
-def test_pre_tool_use_while_working_is_a_noop(tmp_path):
+def test_pre_tool_use_while_working_records_activity(tmp_path):
     _armed_session(tmp_path)
-    new, _ = run(tmp_path, {"hook_event_name": "PreToolUse", "session_id": "s1", "tool_name": "Read", "tool_input": {}})
+    new, calls = run(tmp_path, {"hook_event_name": "PreToolUse", "session_id": "s1", "tool_name": "Bash",
+                                "tool_input": {"command": "pytest -q", "description": "Run the test suite"}})
+    assert new["status"] == "working" and new["activity"] == "Run the test suite" and calls == []
+
+
+def test_pre_tool_use_without_session_is_ignored(tmp_path):
+    new, _ = run(tmp_path, {"hook_event_name": "PreToolUse", "session_id": "ghost", "tool_name": "Read", "tool_input": {}})
     assert new is None
+
+
+def test_new_prompt_clears_activity(tmp_path):
+    _armed_session(tmp_path)
+    run(tmp_path, {"hook_event_name": "PreToolUse", "session_id": "s1", "tool_name": "Read",
+                   "tool_input": {"file_path": "/a/b/notes.md"}})
+    new, _ = run(tmp_path, {"hook_event_name": "UserPromptSubmit", "session_id": "s1", "prompt": "next thing"})
+    assert "activity" not in new
 
 
 def test_idle_notification_ignored_while_watching(tmp_path):

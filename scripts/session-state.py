@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Claude Code hook: keep <widget home>/sessions/<id>.json in sync and launch the widget.
 
-Hook use: stdin JSON from Claude Code (SessionStart, UserPromptSubmit, Stop,
+Hook use: stdin JSON from Claude Code (SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop,
 Notification, SessionEnd). Always exits 0.
 CLI use:  session-state.py cmd show|hide|quit|name <text>
 """
@@ -32,7 +32,7 @@ def launch_widget():
     out = open(os.path.join(w.WIDGET_DIR, "widget.log"), "a")
     subprocess.Popen([sys.executable, os.path.join(w.CODE_DIR, "widget.py")],
                      stdout=out, stderr=out, stdin=subprocess.DEVNULL,
-                     start_new_session=True)
+                     start_new_session=True, env=w.clean_env())
 
 
 def ensure_widget_running(widget_dir, launch=launch_widget, alive=w.is_alive):
@@ -72,17 +72,26 @@ def handle(payload, *, sessions_dir, tint_dir, pid, tty, notify, launch):
         if payload.get("source", "startup") == "startup" or not existing:
             fields.update(status="idle", task="")
     elif event == "UserPromptSubmit":
-        fields = {"status": "working", "task": w.truncate_task(payload.get("prompt", "")), "armed": None}
+        fields = {"status": "working", "task": w.truncate_task(payload.get("prompt", "")),
+                  "armed": None, "activity": None}
     elif event == "PostToolUse":
         what = armed_by(payload)
         if not what:
             return None
         fields = {"armed": what}
     elif event == "PreToolUse":
-        cur = w.load_session(sessions_dir, sid) or {}
-        if cur.get("status") != "watching":
-            return None                      # normal tool use while working: nothing to record
-        fields = {"status": "working", "armed": None}     # the watcher fired, Claude resumed
+        cur = w.load_session(sessions_dir, sid)
+        if cur is None:
+            return None
+        fields = {"activity": w.activity_text(payload.get("tool_name"), payload.get("tool_input"))}
+        if cur.get("status") == "watching":
+            fields.update(status="working", armed=None)   # the watcher fired, Claude resumed
+        elif fields["activity"] == cur.get("activity"):
+            return None                      # same step again: skip the write
+        else:
+            # Only the activity line changes. touch=False keeps the card order steady.
+            _, new = w.update_session_fn(sessions_dir, sid, lambda c: fields, touch=False)
+            return new
     elif event == "Stop":
         cur = w.load_session(sessions_dir, sid) or {}
         fields = {"status": "watching" if cur.get("armed") else "needs_input"}

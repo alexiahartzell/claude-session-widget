@@ -1,5 +1,5 @@
 """Pure helpers shared by the session hook and the widget. No tkinter here."""
-import fcntl, json, os, re, subprocess, tempfile, time
+import fcntl, functools, json, os, re, subprocess, tempfile, time
 
 HOME = os.path.expanduser("~")
 CODE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -77,8 +77,11 @@ def update_session_fn(sessions_dir, session_id, fn, touch=True):
         new.update(fn(dict(new)) or {})
         new = {k: v for k, v in new.items() if v is not None}
         new["session_id"] = session_id
+        now = time.time()
         if touch or "updated" not in new:
-            new["updated"] = time.time()
+            new["updated"] = now
+        if new.get("status") != (old or {}).get("status") or "status_since" not in new:
+            new["status_since"] = now          # the waiting timer restarts on a new status
         write_session(sessions_dir, new)
     finally:
         lock.close()
@@ -108,11 +111,99 @@ def display_label(session):
 
 
 def subtitle(session):
-    """Second line of a row: what it waits on, the task, or the tab colour."""
+    """Second line of a row: what Claude is doing right now, what it waits on,
+    your last prompt, or the tab colour."""
     task = (session.get("task") or "").strip()
-    if session.get("status") == "watching" and session.get("armed"):
+    status = session.get("status")
+    if status == "watching" and session.get("armed"):
         return f"waiting on {session['armed']}" + (f" · {task}" if task else "")
+    if status in ("working", "permission") and session.get("activity"):
+        return session["activity"]
     return task or f"{session.get('color_name') or 'grey' } tab"
+
+
+def _short(text, n=60):
+    text = re.sub(r"\s+", " ", str(text or "")).strip()
+    return text if len(text) <= n else text[:n - 1].rstrip() + "…"
+
+
+def activity_text(tool_name, tool_input):
+    """A short plain-words line for the tool call Claude is about to make."""
+    if not tool_name:
+        return ""
+    inp = tool_input if isinstance(tool_input, dict) else {}
+    base = lambda key: os.path.basename(str(inp.get(key) or "").rstrip("/"))
+    if tool_name == "Bash":
+        if inp.get("description"):
+            return _short(inp["description"])
+        return _short("Running " + str(inp.get("command") or "a command"))
+    if tool_name in ("Edit", "MultiEdit", "NotebookEdit"):
+        return _short("Editing " + (base("file_path") or base("notebook_path") or "a file"))
+    if tool_name == "Write":
+        return _short("Writing " + (base("file_path") or "a file"))
+    if tool_name == "Read":
+        return _short("Reading " + (base("file_path") or "a file"))
+    if tool_name in ("Grep", "Glob"):
+        return "Searching the code"
+    if tool_name == "WebSearch":
+        return _short("Searching the web: " + str(inp.get("query") or ""))
+    if tool_name == "WebFetch":
+        host = re.sub(r"^[a-z]+://", "", str(inp.get("url") or "")).split("/")[0]
+        return _short("Reading " + (host or "a web page"))
+    if tool_name in ("Agent", "Task"):
+        return _short("Agent: " + str(inp.get("description") or "working"))
+    if tool_name == "Skill":
+        return _short("Using skill " + str(inp.get("skill") or ""))
+    if tool_name.startswith("mcp__"):
+        return _short("Using " + tool_name.split("__")[1])
+    return _short("Using " + tool_name)
+
+
+def elapsed_text(session, now=None):
+    """How long the session has been in its current status, in plain words."""
+    since = session.get("status_since") or session.get("updated")
+    if not since:
+        return ""
+    secs = max(0, (time.time() if now is None else now) - _num(since))
+    mins = int(secs // 60)
+    if mins < 1:
+        return "just now"
+    if mins < 60:
+        return f"{mins} min"
+    h, m = divmod(mins, 60)
+    return f"{h} h {m} min" if m else f"{h} h"
+
+
+@functools.lru_cache(maxsize=256)
+def project_name(cwd, home=HOME):
+    """The project a folder belongs to: the nearest enclosing git checkout
+    (a .git folder or worktree file), else the folder's own name. A repo at
+    home itself, such as dotfiles, does not count."""
+    if not cwd:
+        return ""
+    path = os.path.abspath(cwd)
+    home = os.path.abspath(home)
+    cur = path
+    while True:
+        if cur == home or cur == os.path.dirname(cur):
+            break
+        if os.path.exists(os.path.join(cur, ".git")):
+            return os.path.basename(cur)
+        cur = os.path.dirname(cur)
+    return os.path.basename(path.rstrip("/")) or path
+
+
+def project_tag(session, name=None):
+    """Project name for the card, or '' when the card's title already is that name."""
+    tag = (name or project_name)(session.get("cwd") or "")
+    return "" if not tag or tag == display_label(session) else tag
+
+
+def clean_env(env=None):
+    """A copy of the environment without macOS malloc debugging switches,
+    which make every child Python print a harmless warning into the log."""
+    env = dict(os.environ if env is None else env)
+    return {k: v for k, v in env.items() if not k.startswith("Malloc")}
 
 
 def read_tint(tint_dir, tty):
@@ -543,6 +634,7 @@ def mirror_claude_sessions(claude_dir, sessions_dir, tint_dir=TINT_DIR,
                 "label": os.path.basename(cwd.rstrip("/")) or cwd or "?",
                 "task": rec.get("name") or "", "status": status, "source": "mirror",
                 "armed": armed, "transcript_mtime": mtime, "updated": time.time()}
+            data["status_since"] = data["updated"]
             write_session(sessions_dir, {k: v for k, v in data.items() if v is not None})
             continue
         was = ours.get("status")

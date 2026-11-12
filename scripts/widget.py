@@ -16,6 +16,8 @@ CARD_H = 58           # minimum card height
 LINE_H = 18           # title line height
 CARD_GAP = 8
 RADIUS = 16
+PILL_H = 20           # status pill height
+PILL_PAD = 9          # space either side of the status word inside its pill
 STATUS_WORD = {"working": "working", "needs_input": "needs you", "permission": "permission",
                "idle": "idle", "watching": "watching"}
 STATE_FILE = os.path.join(w.WIDGET_DIR, "widget-state.json")
@@ -88,8 +90,12 @@ class Widget:
         self.f_title = font(11, False)
         self.f_label = font(13, True)
         self.f_sub = font(10)
-        self.f_status = font(10, False)
+        self.f_status = font(10, True)
+        self.f_time = font(9)
+        self.f_tag = font(10, True)
         self.f_close = font(13, False)
+        # Every title gets the same width, set by the widest possible pill.
+        self.pill_w = max(self.f_status.measure(t) for t in STATUS_WORD.values()) + 2 * PILL_PAD
 
         self.c = tk.Canvas(self.root, width=W_PX, height=100, bg=canvas_bg,
                            highlightthickness=0, bd=0)
@@ -213,7 +219,8 @@ class Widget:
             self.handle_empty(sessions)
             self.mode = w.effective_mode()
             key = [self.mode] + [(s["session_id"], s.get("status"), s.get("armed"), w.display_label(s),
-                                  s.get("title"), s.get("task"), s.get("color")) for s in sessions]
+                                  s.get("title"), s.get("task"), s.get("activity"), s.get("color"),
+                                  w.project_tag(s), w.elapsed_text(s)) for s in sessions]
             if key != self.last_key:
                 self.last_key = key
                 self.redraw(sessions)
@@ -303,25 +310,67 @@ class Widget:
         status = s.get("status") or "idle"
         attention = status in w.ATTENTION
         x1, x2 = PAD, W_PX - PAD
-        text_x, text_w = x1 + 18, (x2 - 92) - (x1 + 18)
+        pill_x2 = x2 - 14
+        text_x = x1 + 18
+        text_w = (pill_x2 - self.pill_w - 12) - text_x
         lines = self.title_lines(w.display_label(s), text_w)
         h = CARD_H + LINE_H * (len(lines) - 1)
         card_fill = "#" + w.card_fill(color, th["bg"][1:], self.mode)
         glow = rounded(c, x1 - 2, y - 2, x2 + 2, y + h + 2, RADIUS + 2,
                        fill="", outline=vivid if attention else "", width=3, tags=(tag,))
         rounded(c, x1, y, x2, y + h, RADIUS, fill=card_fill, outline="", tags=(tag,))
+
         ty = y + 19
         for line in lines:
             c.create_text(text_x, ty, text=line, anchor="w",
                           fill=th["fg"] if attention else mix(th["fg"], th["dim"], 0.4), font=self.f_label, tags=(tag,))
             ty += LINE_H
-        sub = self.fit(w.subtitle(s), self.f_sub, text_w)
-        c.create_text(text_x, ty + 3, text=sub, anchor="w", fill=th["dim"], font=self.f_sub, tags=(tag,))
-        c.create_text(x2 - 16, y + h / 2, text=STATUS_WORD.get(status, status), anchor="e",
-                      fill=vivid if attention else th["dim"], font=self.f_status, tags=(tag,))
+        self.draw_subtitle(s, text_x, ty + 3, text_w, vivid, th, tag)
+        self.draw_status(s, status, attention, pill_x2, y, h, vivid, card_fill, th, tag)
         if attention:
             self.pulse_items.append((glow, vivid, mix(vivid, card_fill, 0.7)))
         return h
+
+    def draw_subtitle(self, s, x, y, width, vivid, th, tag):
+        """Project name in the card's accent colour, then the activity or task."""
+        c = self.c
+        project = w.project_tag(s)
+        if project:
+            project = self.fit(project, self.f_tag, width * 0.45)
+            c.create_text(x, y, text=project, anchor="w", fill=vivid, font=self.f_tag, tags=(tag,))
+            x += self.f_tag.measure(project) + 4
+            width -= self.f_tag.measure(project) + 4
+            c.create_text(x, y, text="·", anchor="w", fill=th["dim"], font=self.f_sub, tags=(tag,))
+            x += self.f_sub.measure("· ")
+            width -= self.f_sub.measure("· ")
+        sub = self.fit(w.subtitle(s), self.f_sub, max(width, 0))
+        c.create_text(x, y, text=sub, anchor="w", fill=th["dim"], font=self.f_sub, tags=(tag,))
+
+    def pill(self, x1, y1, x2, y2, fill, tag):
+        """A crisp capsule: two circles joined by a rectangle. A smoothed polygon
+        looks lumpy at this size."""
+        c, d = self.c, y2 - y1
+        c.create_oval(x1, y1, x1 + d, y2, fill=fill, outline=fill, tags=(tag,))
+        c.create_oval(x2 - d, y1, x2, y2, fill=fill, outline=fill, tags=(tag,))
+        c.create_rectangle(x1 + d / 2, y1, x2 - d / 2, y2, fill=fill, outline=fill, tags=(tag,))
+
+    def draw_status(self, s, status, attention, right, y, h, vivid, card_fill, th, tag):
+        """A rounded pill holding the status word, with the time in that status below it."""
+        c = self.c
+        word = STATUS_WORD.get(status, status)
+        since = w.elapsed_text(s)
+        pw = self.f_status.measure(word) + 2 * PILL_PAD
+        block_h = PILL_H + (15 if since else 0)
+        py = y + (h - block_h) / 2
+        if attention:
+            fill, ink = mix(vivid, card_fill, 0.35), th["fg"]
+        else:
+            fill, ink = mix(card_fill, th["fg"], 0.10), mix(th["fg"], th["dim"], 0.25)
+        self.pill(right - pw, py, right, py + PILL_H, fill, tag)
+        c.create_text(right - pw / 2, py + PILL_H / 2, text=word, fill=ink, font=self.f_status, tags=(tag,))
+        if since:
+            c.create_text(right - pw / 2, py + PILL_H + 9, text=since, fill=th["dim"],
+                          font=self.f_time, tags=(tag,))
 
     def pulse(self):
         if not self.alive:
@@ -336,6 +385,9 @@ class Widget:
 
 
 def main():
+    # Drop macOS malloc debugging switches so osascript children stay quiet in the log.
+    for k in [k for k in os.environ if k.startswith("Malloc")]:
+        del os.environ[k]
     app = Widget()
     app.root.mainloop()
 

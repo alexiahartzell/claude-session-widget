@@ -35,8 +35,8 @@ Each Claude tab also gets its own background colour, and its card in the panel m
 Each card is one Claude Code session.
 
 - **The title** is the name Claude Code gives the chat. Before it has one, the card shows the project folder name.
-- **The second line** is the start of your last prompt, or what Claude is waiting on.
-- **The word on the right** is the session's status.
+- **The second line** starts with the project, in the card's colour. The project is the git checkout the session started in, or else its folder. Then comes what Claude is doing right now, such as "Editing loader.py" or "Run the test suite". Once Claude stops, it shows the start of your last prompt, or what Claude is waiting on.
+- **The pill on the right** is the session's status. Under it is how long the session has been in that status, so you can see which one has waited longest.
 
 | Status | Meaning | Card |
 | --- | --- | --- |

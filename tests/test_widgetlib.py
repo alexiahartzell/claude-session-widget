@@ -490,3 +490,113 @@ def test_refresh_titles_updates_only_when_transcript_changed(tmp_path):
     os.utime(tr, (2, 2))
     w.refresh_titles(se, projects_dir=str(tmp_path / "projects"))
     assert w.load_session(se, "sid-a")["title"] == "Second"
+
+
+# ---- waiting timer ----
+
+def test_status_since_set_on_first_status_and_on_change(tmp_path):
+    d = str(tmp_path / "sessions")
+    _, a = w.update_session(d, "s", status="working")
+    assert a["status_since"] == a["updated"]
+    time.sleep(0.01)
+    _, b = w.update_session(d, "s", status="working", task="more")
+    assert b["status_since"] == a["status_since"]           # same status: clock keeps running
+    time.sleep(0.01)
+    _, c = w.update_session(d, "s", status="needs_input")
+    assert c["status_since"] > a["status_since"]
+
+
+def test_status_since_untouched_by_non_status_updates(tmp_path):
+    d = str(tmp_path / "sessions")
+    _, a = w.update_session(d, "s", status="idle")
+    _, b = w.update_session_fn(d, "s", lambda cur: {"color": "112233"}, touch=False)
+    assert b["status_since"] == a["status_since"]
+
+
+def test_mirror_seed_records_status_since(tmp_path):
+    cl, se = tmp_path / "claude", str(tmp_path / "sessions")
+    _claude_record(cl, 3989, "sid-a", "busy")
+    w.mirror_claude_sessions(str(cl), se, tint_dir=str(tmp_path), alive=lambda p: True, tty_of=lambda p: None)
+    s = w.load_session(se, "sid-a")
+    assert s["status_since"] == s["updated"]
+
+
+def test_elapsed_text():
+    assert w.elapsed_text({"status_since": 1000.0}, now=1030.0) == "just now"
+    assert w.elapsed_text({"status_since": 1000.0}, now=1000.0 + 5 * 60 + 10) == "5 min"
+    assert w.elapsed_text({"status_since": 1000.0}, now=1000.0 + 2 * 3600 + 7 * 60) == "2 h 7 min"
+    assert w.elapsed_text({"status_since": 1000.0}, now=1000.0 + 3 * 3600) == "3 h"
+    assert w.elapsed_text({"updated": 1000.0}, now=1000.0 + 120) == "2 min"   # older files
+    assert w.elapsed_text({}, now=5.0) == ""
+
+
+# ---- project name ----
+
+def test_project_name_uses_nearest_repo_root(tmp_path):
+    repo = tmp_path / "home" / "work" / "dynamics"
+    (repo / ".git").mkdir(parents=True)
+    deep = repo / "src" / "solver"
+    deep.mkdir(parents=True)
+    w.project_name.cache_clear()
+    assert w.project_name(str(deep), home=str(tmp_path / "home")) == "dynamics"
+
+
+def test_project_name_accepts_worktree_git_file(tmp_path):
+    wt = tmp_path / "home" / "wt-feature"
+    wt.mkdir(parents=True)
+    (wt / ".git").write_text("gitdir: /elsewhere\n")
+    w.project_name.cache_clear()
+    assert w.project_name(str(wt / "a"), home=str(tmp_path / "home")) == "wt-feature"
+
+
+def test_project_name_without_repo_is_folder_name(tmp_path):
+    home = tmp_path / "home"
+    d = home / "notes" / "today"
+    d.mkdir(parents=True)
+    (home / ".git").mkdir()                      # a dotfiles repo at home must not win
+    w.project_name.cache_clear()
+    assert w.project_name(str(d), home=str(home)) == "today"
+    assert w.project_name("", home=str(home)) == ""
+
+
+def test_project_tag_hidden_when_label_already_shows_it():
+    s = {"cwd": "/x/dynamics", "label": "dynamics"}
+    assert w.project_tag(s, name=lambda cwd: "dynamics") == ""
+    s["title"] = "Fit the spectrum"
+    assert w.project_tag(s, name=lambda cwd: "dynamics") == "dynamics"
+
+
+# ---- log noise ----
+
+def test_clean_env_drops_malloc_debug_vars():
+    env = {"PATH": "/bin", "MallocStackLogging": "0", "MallocStackLoggingNoCompact": "1", "HOME": "/h"}
+    assert w.clean_env(env) == {"PATH": "/bin", "HOME": "/h"}
+
+
+# ---- live activity line ----
+
+def test_activity_text_per_tool():
+    a = w.activity_text
+    assert a("Bash", {"command": "pytest -q", "description": "Run the test suite"}) == "Run the test suite"
+    assert a("Bash", {"command": "pytest -q"}) == "Running pytest -q"
+    assert a("Edit", {"file_path": "/x/y/widget.py"}) == "Editing widget.py"
+    assert a("Write", {"file_path": "/x/notes.md"}) == "Writing notes.md"
+    assert a("Read", {"file_path": "/x/README.md"}) == "Reading README.md"
+    assert a("Grep", {"pattern": "foo"}) == "Searching the code"
+    assert a("WebSearch", {"query": "exciton transport"}) == "Searching the web: exciton transport"
+    assert a("WebFetch", {"url": "https://arxiv.org/abs/1"}) == "Reading arxiv.org"
+    assert a("Agent", {"description": "Review the diff"}) == "Agent: Review the diff"
+    assert a("mcp__zotero__search", {}) == "Using zotero"
+    assert a("Mystery", {}) == "Using Mystery"
+    assert len(a("Bash", {"description": "x" * 200})) <= 60
+    assert a(None, None) == ""
+
+
+def test_subtitle_shows_live_activity_while_working_or_asking():
+    s = {"status": "working", "task": "fix the plot", "activity": "Editing plot.py"}
+    assert w.subtitle(s) == "Editing plot.py"
+    s["status"] = "permission"
+    assert w.subtitle(s) == "Editing plot.py"
+    s["status"] = "needs_input"
+    assert w.subtitle(s) == "fix the plot"
+    assert w.subtitle({"status": "working", "task": "fix the plot"}) == "fix the plot"
