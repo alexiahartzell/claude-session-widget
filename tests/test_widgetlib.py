@@ -323,8 +323,8 @@ def test_single_instance_lock(tmp_path):
 
 
 def test_subtitle_while_watching_names_what_it_waits_on():
-    assert w.subtitle({"status": "watching", "armed": "a watcher", "task": "run the calc"}) == "waiting on a watcher"
-    assert w.subtitle({"status": "watching", "armed": "a subagent", "task": ""}) == "waiting on a subagent"
+    assert w.subtitle({"status": "watching", "armed": "a watcher", "task": "run the calc"}) == "your turn · waiting on a watcher"
+    assert w.subtitle({"status": "watching", "armed": "a subagent", "task": ""}) == "your turn · waiting on a subagent"
 
 
 # ---- reading armed watchers out of a mirrored session's transcript ----

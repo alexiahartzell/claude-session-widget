@@ -35,7 +35,7 @@ Each Claude tab also gets its own background colour, and its card in the panel m
 Each card is one Claude Code session.
 
 - **The title** is a short summary, always on one line, of what the session is working on now, refreshed after each reply. Before the first summary, it is the name Claude Code gives the chat, or else the folder name.
-- **The second line** is where and what now. It starts with the project, in the card's colour: the git checkout the session is working in, or else its folder. While Claude works, it adds the step Claude is on, such as "Editing loader.py". While Claude watches a background job, it says what it is waiting on. When it is your turn, it shows only the project.
+- **The second line** is where and what now. It starts with the project, in the card's colour: the git checkout the session is working in, or else its folder. While Claude works, it adds the step Claude is on, such as "Editing loader.py". While Claude watches a background job, it says "your turn" and what it is waiting on, such as "your turn · waiting on a background job". You can reply, and Claude also resumes on its own when the job ends. When it is only your turn, it shows just the project.
 - **The summary** in the title is written by a small model (Haiku, through your own `claude` command) from your last few prompts. Turn it off with `/widget summary off`.
 - **A third line appears while subagents run.** It counts them and lists what each one is doing. Background agents stay listed until they finish.
 - **Hover over a card** to see its full title, the chat's original name, the folder, and each running agent.
@@ -46,7 +46,7 @@ Each card is one Claude Code session.
 | **permission** | Claude wants you to approve a tool call. | Pulses, with a macOS banner |
 | **needs you** | Claude finished its turn and is waiting for your reply. | Pulses, with a macOS banner |
 | **working** | Claude is busy on your last prompt. | Steady |
-| **watching** | Claude is waiting on something it started: a background job, a subagent, a timer or a watcher. | Steady |
+| **watching** | Claude is waiting on something it started, in this turn or an earlier one: a background job, a subagent, a timer or a watcher. You can still reply. | Steady |
 | **idle** | Nothing is happening in this session. | Steady |
 
 Sessions that need you always sort to the top.
