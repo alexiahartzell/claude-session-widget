@@ -117,7 +117,7 @@ Every Terminal tab running Claude Code gets its own background colour when the s
 There are fifteen colour schemes, and each comes in a dark and a light version. Light mode also turns the tab's text dark and gives the panel a light background, so it works whatever your Terminal profile looks like.
 
 <p align="center">
-  <img src="docs/schemes.png" alt="A sheet of all fifteen colour schemes. Each scheme is a row of ten sample cards, shown twice: once on the dark panel and once on the light panel. The five original schemes come first, then the ten newer ones." width="100%">
+  <img src="docs/schemes.png" alt="A sheet of all fifteen colour schemes. Each scheme is a row of ten sample cards, shown twice: once on the dark panel and once on the light panel." width="100%">
 </p>
 <p align="center"><sub>Each scheme in its dark version, then its light version, with colours in rainbow order so schemes are easy to compare.</sub></p>
 
@@ -127,18 +127,18 @@ There are fifteen colour schemes, and each comes in a dark and a light version. 
 | --- | --- | --- |
 | **muted** | 10 | Soft, greyish colours from every part of the rainbow. The default. |
 | **jewel** | 10 | Deep, rich colours from every part of the rainbow. |
-| **dusk** | 10 | Only purples, lilacs, mauves and dusty roses. |
-| **ocean** | 10 | Only sea greens, teals and blues, from shallows to the deep. |
 | **colourblind** | 10 | Colours picked to stay distinct for protanopia, deuteranopia and tritanopia. |
-| **forest** | 10 | Only greens and woody browns. |
-| **ember** | 10 | Only fire colours: reds, oranges and golds. |
-| **aurora** | 10 | Only northern-lights colours: greens, teals, blues and violets. |
-| **desert** | 10 | Only soft earth colours: sand, clay, terracotta and sage. |
+| **dusk** | 10 | Only purples, lilacs, mauves and dusty roses. |
 | **berry** | 10 | Only berry colours: blues, purples, magentas and reds. |
-| **nordic** | 10 | Only cool greys with a hint of blue or green. |
-| **autumn** | 10 | Only autumn leaves: maroon, rust, pumpkin, ochre and olive. |
-| **neon** | 10 | Only bright synthwave colours: cyans, blues, violets and pinks. |
 | **galaxy** | 10 | Only deep night-sky blues and violets. |
+| **neon** | 10 | Only bright synthwave colours: cyans, blues, violets and pinks. |
+| **nordic** | 10 | Only cool greys with a hint of blue or green. |
+| **ocean** | 10 | Only sea greens, teals and blues, from shallows to the deep. |
+| **aurora** | 10 | Only northern-lights colours: greens, teals, blues and violets. |
+| **forest** | 10 | Only greens and woody browns. |
+| **desert** | 10 | Only soft earth colours: sand, clay, terracotta and sage. |
+| **autumn** | 10 | Only autumn leaves: maroon, rust, pumpkin, ochre and olive. |
+| **ember** | 10 | Only fire colours: reds, oranges and golds. |
 | **tropical** | 10 | Only tropical colours: pinks, corals, mangos and lagoon blues. |
 
 **Every scheme has ten colours**, so ten tabs can be open before any colour repeats.
