@@ -117,7 +117,7 @@ Every Terminal tab running Claude Code gets its own background colour when the s
 There are seventeen colour schemes, and each comes in a dark and a light version. Light mode also turns the tab's text dark and gives the panel a light background, so it works whatever your Terminal profile looks like.
 
 <p align="center">
-  <img src="docs/schemes.png" alt="A sheet of all fifteen colour schemes. Each scheme is a row of ten sample cards, shown twice: once on the dark panel and once on the light panel." width="100%">
+  <img src="docs/schemes.png" alt="A sheet of all seventeen colour schemes. Each scheme is a row of ten sample cards, shown twice: once on the dark panel and once on the light panel." width="100%">
 </p>
 <p align="center"><sub>Each scheme in its dark version, then its light version, with colours in rainbow order so schemes are easy to compare.</sub></p>
 
