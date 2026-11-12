@@ -2,12 +2,12 @@
 
 **A small always-on-top panel that shows every Claude Code session you have open, and which ones need you.**
 
-If you run several Claude Code sessions in different Terminal tabs, it is easy to lose track of the one quietly waiting for an answer. This panel sits in the corner of your screen, lists each session by its chat title, and pulses the ones that are waiting on you. Click a card to jump straight to that tab.
+If you run several Claude Code sessions in different Terminal tabs, it is easy to lose track of the one quietly waiting for an answer. This panel sits in the corner of your screen, lists each session with a short summary of what it is doing, and pulses the ones that are waiting on you. Click a card to jump straight to that tab.
 
 Each Claude tab also gets its own background colour, and its card in the panel matches. Pick from fifteen colour schemes, each in a light and a dark version.
 
 <p align="center">
-  <img src="docs/panel.png" alt="The widget panel listing five Claude Code sessions. Two are outlined and pulsing: one waiting for permission and one waiting for input. The others are watching a background job, working, and idle." width="354">
+  <img src="docs/panel.png" alt="The widget panel listing five Claude Code sessions, each with a one-line summary, its project name and a status pill with a timer. Two are outlined and pulsing: one waiting for permission and one waiting for input. The others are watching a background job, working with two subagents, and idle." width="380">
 </p>
 
 ---
@@ -87,7 +87,7 @@ Inside any Claude Code session, run these two commands:
 
 Then **quit and start a new Claude Code session.** The panel appears in the bottom-right corner of your screen.
 
-**The first time you click a card**, macOS asks whether Python may control Terminal. Click **OK**, or click-to-jump will not work.
+**The first time the panel talks to Terminal**, macOS asks whether Python may control Terminal. Click **OK**. Click-to-jump and the status check from tab titles both need it.
 
 Prefer the terminal? The same install works from your shell:
 
@@ -206,30 +206,41 @@ Run these inside any Claude Code session:
 | `/session-widget:widget quit` | Close the panel completely. It restarts with your next session. |
 | `/session-widget:widget name <text>` | Give the current session a custom title on its card. |
 | `/session-widget:widget name` | Clear the custom title. |
+| `/session-widget:widget mute [minutes]` | Silence macOS banners for a while, an hour by default. Cards still pulse. |
+| `/session-widget:widget unmute` | Turn banners back on. |
+| `/session-widget:widget summary on` or `off` | Turn the one-line conversation summaries on or off. |
 
 ---
 
 ## How it works
 
-There are three small Python programs and no background service.
+There are four small Python programs and no background service.
 
 ```text
  Claude Code session ──hook events──▶ tint.py ──colours──▶ the Terminal tab
                      ──hook events──▶ session-state.py ──writes──▶ ~/.claude/widget/sessions/<id>.json
+                                            │                                    │
+                                after a reply ▼                                  │
+                                      summarise.py ──summary──▶ (same file)      │
                                                                                  │
-                         macOS banner ◀── widget.py (the panel) ◀──reads twice a second
+     macOS banner ◀── widget.py (the panel) ◀──reads twice a second ─────────────┘
+                          │
+                          └──reads every tab title──▶ Terminal
 ```
 
 1. **When a session starts, `tint.py` colours its Terminal tab**, and puts the original colours back when it ends.
-2. **Claude Code runs `session-state.py` on its hook events.** These are session start and end, each prompt you send, each finished turn, permission requests, and a few tool calls.
+2. **Claude Code runs `session-state.py` on its hook events.** These are session start and end, each prompt you send, each tool call, each finished turn, permission requests, and each finished subagent.
 3. **The hook writes one small status file per session.**
 4. **`widget.py` reads those files twice a second** and redraws the panel when anything changes.
 5. **When a session starts needing you**, the panel posts a macOS banner and reappears if it was hidden.
+6. **After each reply, `summarise.py` writes the card's summary** in the background. It sends your last few prompts to Haiku through your own `claude` command, with hooks turned off so it never triggers itself.
+7. **Every second or two, the panel reads each Terminal tab's title.** Claude Code shows a spinner there while it works and ✳ while it waits, so the panel can correct a card whose hook was missed.
 
 A few details:
 
-- **Sessions you started before installing** still appear. The panel reads Claude Code's own list of running sessions to fill the gaps.
-- **Chat titles** come from Claude Code's transcript for each session.
+- **Sessions you started before installing** appear once you restart them. Older Claude Code versions also kept a list of running sessions, which the panel reads when it exists.
+- **Chat names** come from Claude Code's transcript for each session, or from the Terminal tab title when no transcript is found.
+- **Subagents** are tracked from each Agent call. A finished subagent does not say which call it was, so the panel removes the oldest matching one.
 - **Closed sessions disappear** as soon as their process ends. Anything untouched for twelve hours is cleared too.
 - **Scripted runs such as `claude -p`** are ignored, since there is no tab to jump to.
 - **Hooks never block Claude.** Each one finishes in a fraction of a second and always exits cleanly, even on an error.
@@ -252,6 +263,14 @@ export CLAUDE_WIDGET_HOME="$HOME/.local/state/claude-widget"
 | --- | --- | --- |
 | `CLAUDE_WIDGET_HOME` | `~/.claude/widget` | Where status files, logs and the panel position live. |
 | `CLAUDE_WIDGET_TINT` | on | Set to `off` to stop new sessions colouring their tab. |
+| `CLAUDE_WIDGET_SUMMARY_MODEL` | `haiku` | The model that writes card summaries. |
+
+### Saved settings
+
+`config.json` in the state folder holds two settings that the commands change:
+
+- **`summaries`**, true or false, set by `/session-widget:widget summary on` or `off`.
+- **`mute_until`**, the time banners come back, set by the mute commands or a click on "mute banners".
 
 ### Where tab colours are stored
 
@@ -263,7 +282,7 @@ Tab colours live in `~/.claude/tint-state/`, one file per tab, plus `scheme.json
 
 - **`orig`** and **`orig_text`** are the tab's own background and text colour, restored when the session ends.
 - **`tint`** is the colour in use, as six hex digits.
-- **`name`** is shown on idle cards, such as "sapphire tab".
+- **`name`** is the colour's name in its scheme.
 
 ---
 
@@ -310,6 +329,17 @@ python3 ~/.claude/plugins/cache/session-widget/session-widget/*/scripts/tint.py 
 - The banners come from AppleScript, so macOS usually lists them under **Script Editor**. Allow them in **System Settings → Notifications → Script Editor**.
 - Focus modes and Do Not Disturb hide them too.
 
+**A card says "working" while Claude is waiting.**
+
+- The tab-title check fixes this within a few seconds, but only in Apple's Terminal and only with the Automation permission above.
+- In other terminals the card waits for the next hook event.
+
+**Cards show no summary.**
+
+- Summaries start after the first reply in a new session.
+- They need the `claude` command on the `PATH` Claude Code started from, and a logged-in account.
+- Check they are on with `/session-widget:widget summary on`.
+
 **A card stays after its session closed.**
 
 - It clears on the next refresh once the process has ended. If it does not, run `/session-widget:widget quit`, then start a new session.
@@ -328,6 +358,8 @@ Update to the newest version:
 /plugin marketplace update session-widget
 /plugin update session-widget@session-widget
 ```
+
+The panel switches to the new version by itself within half a minute. Start new Claude Code sessions to pick up new hooks.
 
 Uninstall:
 
@@ -348,12 +380,12 @@ rm -rf ~/.claude/widget ~/.claude/tint-state
 
 ## Privacy
 
-Everything stays on your Mac.
+Everything stays on your Mac, except the summaries.
 
-- **No network access.** The widget never sends anything anywhere.
-- **What it reads:** Claude Code's list of running sessions, and the end of each session's transcript to find its title and what it is waiting on.
+- **Summaries use your Claude account.** After each reply, your last few prompts in that session go to Haiku through your own `claude` command, the same way Claude Code itself sends them. Nothing goes anywhere else. Turn this off with `/session-widget:widget summary off`, and then the widget makes no network calls at all.
+- **What it reads:** each session's transcript to find its title and what it is waiting on, the titles of your Terminal tabs, and Claude Code's plugin list to spot updates.
 - **What it changes:** the background and text colour of Terminal tabs running Claude Code, put back when each session ends.
-- **What it stores:** the first sixty characters of your latest prompt in each session, in the state folder. Each file is deleted when its session ends.
+- **What it stores:** up to six of your latest prompts per session, cut to 300 characters each, plus the summary, the current step and the folder. They live in the state folder, and each file is deleted when its session ends.
 
 ---
 
@@ -371,6 +403,7 @@ commands/
   tint.md             the /session-widget:tint command
 scripts/
   session-state.py    the hook script, plus the command line behind /widget
+  summarise.py        writes a card's one-line summary in the background
   tint.py             tab colours: the schemes, the hook and the /tint command
   widget.py           the Tkinter panel
   widgetlib.py        shared helpers, with no Tkinter, so they are easy to test
