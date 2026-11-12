@@ -896,68 +896,112 @@ def mirror_claude_sessions(claude_dir, sessions_dir, tint_dir=TINT_DIR,
     return newly_attention
 
 
-# ---- the pet: a tiny pixel creature on each card that acts out the status ----
-# A round sprout with a leaf on top. Each frame is a grid of "b" body, "e" eye
-# and "m" a mark beside it (z, !, ?). Frames alternate on a timer.
+# ---- the pet: a small creature on each card that acts out the status ----
+# Three to choose from, like picking a starter: a water drop, a fire kit and a
+# leaf sprout. Each is a list of shapes on a 24 x 24 grid, so the widget (Tk)
+# and the preview (Pillow) draw exactly the same thing. Roles pick the colour:
+# body takes the card's accent, the rest are fixed or derived from it.
 
-PET_W, PET_H = 12, 11
-_LEAF = {"right": [(6, 0), (7, 0), (6, 1)], "left": [(5, 0), (4, 0), (6, 1)],
-         "droop": [(4, 1), (5, 1), (6, 1)]}
-
-
-def _pet(top=2, eyes="open", look=0, leaf="right", feet=(3, 8), arm=None, mark=None):
-    px = {}
-    for col, row in _LEAF[leaf]:
-        px[(col, row + top - 2)] = "b"
-    spans = [(4, 7), (2, 9), (1, 10), (1, 10), (1, 10), (1, 10), (2, 9)]
-    for r, (a, b) in enumerate(spans):
-        for col in range(a, b + 1):
-            px[(col, top + r)] = "b"
-    if eyes == "open":
-        for col in (4 + look, 7 + look):
-            px[(col, top + 3)] = px[(col, top + 4)] = "e"
-    else:
-        for col in (3, 4, 7, 8):
-            px[(col, top + 4)] = "e"
-    for col in feet:
-        px[(col, top + 7)] = "b"
-    for cell in arm or ():
-        px[cell] = "b"
-    if mark:
-        px[mark] = "m"
-    return ["".join(px.get((c, r), ".") for c in range(PET_W)) for r in range(PET_H)]
-
-
-PET_FRAMES = {
-    # asleep: leaf drooped, eyes shut, breathing, a z drifting up
-    "idle": [_pet(top=3, eyes="shut", leaf="droop", feet=(), mark=(10, 1)),
-             _pet(top=4, eyes="shut", leaf="droop", feet=(), mark=(11, 0))],
-    # scurrying: bobbing, leaf swaying, feet swapping, eyes ahead
-    "working": [_pet(top=2, look=1, leaf="right", feet=(3, 7)),
-                _pet(top=3, look=1, leaf="left", feet=(4, 8))],
-    # sitting and watching, eyes glancing side to side
-    "watching": [_pet(top=3, look=-1, leaf="right"), _pet(top=3, look=1, leaf="right")],
-    # waving at you with a mark overhead
-    "needs_input": [_pet(top=3, arm=[(11, 3), (11, 4), (11, 5)], mark=(10, 0)),
-                    _pet(top=3, arm=[(11, 6), (11, 7)], mark=(10, 1))],
-}
-PET_FRAMES["permission"] = PET_FRAMES["needs_input"]
+PETS = ("drop", "kit", "sprout")
+PET_GRID = 24
 PET_MARK = {"idle": "z", "needs_input": "!", "permission": "?"}
+PET_COLOURS = {"dark": "24242e", "white": "ffffff", "flame": "ff9a3c", "leaf": "5cc75a",
+               "beak": "ffb347", "water": "bfe8ff"}
 
 
-def pet_pixels(status, frame):
-    """[(col, row, kind)] for one animation frame of a status, kind in b/e/m."""
-    frames = PET_FRAMES.get(status) or PET_FRAMES["idle"]
-    grid = frames[frame % len(frames)]
-    return [(c, r, ch) for r, row in enumerate(grid) for c, ch in enumerate(row) if ch != "."]
+def _eyes(out, cx, cy, gap, r, status, look):
+    for ex in (cx - gap + look, cx + gap + look):
+        if status == "idle":
+            out.append(("arc", (ex - r, cy - r, ex + r, cy + r), "dark", 200, 140, 1.2))
+        else:
+            out.append(("oval", (ex - r, cy - 1.25 * r, ex + r, cy + 1.25 * r), "dark"))
+            out.append(("oval", (ex - 0.65 * r, cy - 0.9 * r, ex - 0.05 * r, cy - 0.25 * r), "white"))
+
+
+def pet_shapes(kind, status, frame):
+    """[(shape, coords, role, ...)] for one animation frame. Shapes: oval, poly,
+    line (coords, role, width), arc (box, role, start, extent, width), mark."""
+    f = frame % 2
+    lift = {"needs_input": -1.8 if f else 0, "permission": -1.8 if f else 0,
+            "working": -1 if f else 0, "idle": 0.5 if f else 0}.get(status, 0)
+    look = {"watching": -1.3 if f else 1.3, "working": 0.8}.get(status, 0)
+    squash = 0.8 if status == "working" and not f else 0
+    out = []
+    if status == "working":                          # speed lines that flicker
+        for k, ln in enumerate((2.2, 1.4, 2.2) if f else (1.4, 2.2, 1.4)):
+            y = 11 + 3 * k
+            out.append(("line", (0.3, y, 0.3 + ln, y), "light", 0.9))
+    if kind == "drop":
+        top, bot = 2.6 + lift + squash, 22.4 + lift
+        out.append(("poly", (12, top, 18.5, top + 9.5, 5.5, top + 9.5), "body"))
+        out.append(("oval", (3.5, top + 6.5, 20.5, bot), "body"))
+        out.append(("oval", (6.3, top + 8, 9.3, top + 11.5), "water"))
+        cy = top + 13
+        _eyes(out, 12, cy, 3.6, 1.5, status, look)
+        out.append(("oval", (5.4, cy + 2.6, 8.2, cy + 4), "blush"))
+        out.append(("oval", (15.8, cy + 2.6, 18.6, cy + 4), "blush"))
+        if status != "idle":
+            out.append(("arc", (10.7, cy + 1.6, 13.3, cy + 4), "dark", 200, 140, 0.9))
+    elif kind == "kit":
+        cy = 14 + lift
+        h = 6.6 - squash
+        for sx in (1, -1):                            # ears with flame tips
+            ex = 12 - sx * 6.5
+            out.append(("poly", (ex - sx * 2.5, cy - 3, ex - sx * 1, cy - 10.5, ex + sx * 3.5, cy - 5.5), "body"))
+            out.append(("poly", (ex - sx * 1.55, cy - 7.4, ex - sx * 1, cy - 10.5, ex + sx * 0.9, cy - 8.2), "flame"))
+        out.append(("poly", (12, cy - 9.5 - (0.8 if f else 0), 13.8, cy - 5.5, 10.2, cy - 5.5), "flame"))
+        out.append(("oval", (3, cy - h, 21, cy + h + 1), "body"))
+        out.append(("oval", (8.2, cy + 0.8, 15.8, cy + h + 0.6), "light"))     # muzzle
+        _eyes(out, 12, cy - 0.6, 3.8, 1.45, status, look)
+        out.append(("poly", (11.2, cy + 1.7, 12.8, cy + 1.7, 12, cy + 2.6), "dark"))
+        for sx in (1, -1):
+            for dy in (-0.5, 0.8):
+                out.append(("line", (12 + sx * 5, cy + 2.2, 12 + sx * 9.5, cy + 2.2 + dy), "light", 0.6))
+    else:                                             # sprout
+        cy = 15.2 + lift
+        r = 7.2
+        stem = cy - r + squash
+        out.append(("line", (12, stem + 0.5, 12, stem - 2.4), "leaf", 1.1))
+        tilt = 0.7 if f else -0.7
+        out.append(("poly", (12, stem - 2, 8.2 + tilt, stem - 5.2, 9.5 + tilt, stem - 2.2), "leaf"))
+        out.append(("poly", (12, stem - 2, 15.8 + tilt, stem - 5.6, 14.5 + tilt, stem - 2), "leaf"))
+        out.append(("oval", (12 - r, stem, 12 + r, cy + r), "body"))
+        out.append(("oval", (12 - 0.55 * r, cy + 0.2, 12 + 0.55 * r, cy + 0.85 * r), "light"))
+        up = status in ("needs_input", "permission") and f
+        out.append(("oval", (2.6, cy - (3.5 if up else 0.5), 7.6, cy + (2 if up else 5)), "shade"))
+        _eyes(out, 12, cy - 2.2, 3.1, 1.4, status, look)
+        out.append(("poly", (10.9, cy + 0.1, 13.1, cy + 0.1, 12, cy + 1.7), "beak"))
+    mark = PET_MARK.get(status)
+    if mark:
+        out.append(("mark", (19.5, 3 if (status != "idle" or f) else 5), mark))
+    return out
+
+
+def pet_colours(accent_hex, card_hex):
+    """Role -> hex for one card. The body is the card's accent colour; pass the
+    dark-mode accent so the body stays bright enough for its eyes in both modes."""
+    c = dict(PET_COLOURS, body=accent_hex)
+    c["light"] = _mix(accent_hex, "ffffff", 0.45)
+    c["shade"] = _mix(accent_hex, "000000", 0.18)
+    c["blush"] = _mix(accent_hex, "ff7a9a", 0.55)
+    return c
+
+
+def pet_kind(path=None):
+    """The chosen pet, or None when pets are off."""
+    v = _config(path).get("pet", "drop")
+    if v is True:
+        return "drop"
+    return v if v in PETS else None
 
 
 def pet_enabled(path=None):
-    return _config(path).get("pet", True)
+    return pet_kind(path) is not None
 
 
-def set_pet(on, path=None):
-    _save_config_field(path, pet=bool(on))
+def set_pet(choice, path=None):
+    """choice: one of PETS, or "off"."""
+    _save_config_field(path, pet=choice if choice in PETS else False)
 
 
 # ---- daily stats, shown when you hover the panel header ----

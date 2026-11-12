@@ -825,26 +825,32 @@ def test_hover_card_schedules_the_tip_once_per_card():
 
 # ---- the pet ----
 
-def test_every_pet_status_has_two_frames_of_the_same_size():
-    for status, frames in w.PET_FRAMES.items():
-        assert len(frames) == 2, status
-        assert frames[0] != frames[1], status                 # it actually moves
-        for f in frames:
-            assert len(f) == w.PET_H and all(len(r) == w.PET_W for r in f), status
-            assert sum(r.count("e") for r in f) >= 2, status      # it has eyes
+def test_every_pet_draws_every_status_inside_its_box_and_moves():
+    roles = set(w.pet_colours("4466ff", "222233"))
+    for kind in w.PETS:
+        for status in ("working", "watching", "needs_input", "permission", "idle"):
+            frames = [w.pet_shapes(kind, status, f) for f in (0, 1)]
+            assert frames[0] != frames[1], (kind, status)              # it actually moves
+            for shapes in frames:
+                assert any(sh[0] == "oval" and sh[2] == "dark" for sh in shapes) or status == "idle"
+                for sh in shapes:
+                    pts = sh[1]
+                    assert all(-0.5 <= v <= w.PET_GRID + 0.5 for v in pts), (kind, status, sh)
+                    if sh[0] != "mark":
+                        assert sh[2] in roles, sh
+    assert w.pet_shapes("drop", "idle", 0)[-1] == ("mark", (19.5, 5), "z")
+    assert w.pet_shapes("kit", "permission", 1)[-1][2] == "?"
 
 
-def test_pet_pixels_wraps_frames_and_falls_back_to_idle():
-    assert w.pet_pixels("working", 0) == w.pet_pixels("working", 2)
-    assert w.pet_pixels("mystery", 0) == w.pet_pixels("idle", 0)
-    assert {k for _, _, k in w.pet_pixels("needs_input", 0)} == {"b", "e", "m"}
-
-
-def test_pet_setting_defaults_on_and_saves(tmp_path):
+def test_pet_choice_defaults_to_drop_and_saves(tmp_path):
     cfg = str(tmp_path / "config.json")
-    assert w.pet_enabled(cfg) is True
-    w.set_pet(False, cfg)
-    assert w.pet_enabled(cfg) is False
+    assert w.pet_kind(cfg) == "drop" and w.pet_enabled(cfg)
+    w.set_pet("sprout", cfg)
+    assert w.pet_kind(cfg) == "sprout"
+    w.set_pet("off", cfg)
+    assert w.pet_kind(cfg) is None and not w.pet_enabled(cfg)
+    w._save_config_field(cfg, pet=True)                  # the 1.15.0 setting
+    assert w.pet_kind(cfg) == "drop"
 
 
 # ---- daily stats ----

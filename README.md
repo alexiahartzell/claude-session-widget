@@ -40,7 +40,7 @@ Each card is one Claude Code session.
 - **A third line appears while subagents run.** It counts them and lists what each one is doing. Background agents stay listed until they finish.
 - **Hover over a card** to see its full title, the chat's original name, the folder, each running agent, and that session's prompts and working time today.
 - **Hover over the "claude" header** to see today's stats: prompts sent, how long Claude worked, the longest unbroken stretch, and the busiest session.
-- **A small pet sits beside each status.** It scurries while Claude works, sits and glances around while it watches a background job, waves when it needs you, and sleeps when idle. Turn pets off with `/session-widget:widget pet off`.
+- **A small pet sits beside each status.** Pick one of three, like choosing a starter: **drop**, a water drop, **kit**, a fire kit, or **sprout**, a leaf sprout. It takes the card's colour. It hurries while Claude works, glances around while it watches a background job, hops with a "!" when it needs you, and sleeps when idle. Choose with `/session-widget:widget pet kit`, or hide it with `pet off`.
 - **The pill on the right** is the session's status. Under it is how long the session has been in that status, so you can see which one has waited longest.
 
 | Status | Meaning | Card |
@@ -214,7 +214,7 @@ Run these inside any Claude Code session:
 | `/session-widget:widget mute [minutes]` | Silence macOS banners for a while, an hour by default. Cards still pulse. |
 | `/session-widget:widget unmute` | Turn banners back on. |
 | `/session-widget:widget summary on` or `off` | Turn the one-line conversation summaries on or off. |
-| `/session-widget:widget pet on` or `off` | Show or hide the pet on each card. |
+| `/session-widget:widget pet drop`, `kit`, `sprout` or `off` | Choose the pet on each card, or hide it. With no name, it lists the three. |
 
 ---
 
@@ -276,7 +276,7 @@ export CLAUDE_WIDGET_HOME="$HOME/.local/state/claude-widget"
 `config.json` in the state folder holds two settings that the commands change:
 
 - **`summaries`**, true or false, set by `/session-widget:widget summary on` or `off`.
-- **`pet`**, true or false, set by `/session-widget:widget pet on` or `off`.
+- **`pet`**, `drop`, `kit`, `sprout`, or false when off, set by `/session-widget:widget pet`.
 - **`mute_until`**, the time banners come back, set by the mute commands or a click on "mute banners".
 
 ### Where tab colours are stored

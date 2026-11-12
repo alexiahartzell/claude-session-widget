@@ -457,8 +457,12 @@ def test_prompts_are_counted_for_daily_stats(tmp_path):
     assert day["prompts"] == 2 and day["by_session"]["s1"]["prompts"] == 2
 
 
-def test_cmd_pet_on_off(tmp_path, monkeypatch):
+def test_cmd_pet_choose_list_and_off(tmp_path, monkeypatch):
     cfg = str(tmp_path / "config.json")
     monkeypatch.setattr(w, "WIDGET_CONFIG", cfg)
-    assert "off" in ss.cmd(["pet", "off"], sessions_dir=str(tmp_path), widget_dir=str(tmp_path), tty=None)
-    assert w.pet_enabled(cfg) is False
+    c = lambda *a: ss.cmd(["pet", *a], sessions_dir=str(tmp_path), widget_dir=str(tmp_path), tty=None)
+    assert "drop" in c() and "kit" in c() and "sprout" in c()
+    assert c("kit") == "widget: your pet is now kit, a fire kit" and w.pet_kind(cfg) == "kit"
+    assert c("off") == "widget: pets off" and w.pet_kind(cfg) is None
+    c("on")
+    assert w.pet_kind(cfg) == "drop"

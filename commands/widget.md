@@ -1,6 +1,6 @@
 ---
 description: Show, hide or quit the session panel, rename this card, or mute banners for a while
-argument-hint: show | hide | quit | name <text> | mute [minutes] | unmute | summary on|off | pet on|off
+argument-hint: show | hide | quit | name <text> | mute [minutes] | unmute | summary on|off | pet drop|kit|sprout|off
 allowed-tools: Bash(python3 *session-state.py*)
 ---
 

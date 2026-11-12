@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import widgetlib as w
 
 LOG = os.path.join(w.WIDGET_DIR, "hooks.log")
-USAGE = "usage: /session-widget:widget [show | hide | quit | name <text> | summary on|off | pet on|off | mute [minutes] | unmute]"
+USAGE = "usage: /session-widget:widget [show | hide | quit | name <text> | summary on|off | pet drop|kit|sprout|off | mute [minutes] | unmute]"
 
 def armed_by(payload):
     """What a PostToolUse event leaves Claude waiting on, or None."""
@@ -189,6 +189,9 @@ def resolve_process(me, ps=None):
     return parent, w.tty_of_pid(me, ps=ps), False
 
 
+PET_BLURB = {"drop": "a water drop", "kit": "a fire kit", "sprout": "a leaf sprout"}
+
+
 def cmd(args, *, sessions_dir, widget_dir, tty, pid=None):
     if not args:
         return USAGE
@@ -208,9 +211,16 @@ def cmd(args, *, sessions_dir, widget_dir, tty, pid=None):
     if word == "unmute":
         w.mute_banners(0)
         return "widget: banners on"
-    if word == "pet" and rest[:1] in (["on"], ["off"]):
-        w.set_pet(rest[0] == "on")
-        return f"widget: pets {rest[0]}"
+    if word == "pet":
+        choice = (rest[0] if rest else "").lower()
+        choice = "drop" if choice == "on" else choice
+        if choice == "off":
+            w.set_pet("off")
+            return "widget: pets off"
+        if choice in w.PETS:
+            w.set_pet(choice)
+            return f"widget: your pet is now {choice}, {PET_BLURB[choice]}"
+        return "widget: pick a pet: " + "; ".join(f"{p}, {PET_BLURB[p]}" for p in w.PETS) + "; or off"
     if word == "summary" and rest[:1] in (["on"], ["off"]):
         w.set_summaries(rest[0] == "on")
         return f"widget: conversation summaries {rest[0]}"
