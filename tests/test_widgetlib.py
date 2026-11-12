@@ -886,11 +886,12 @@ def test_stats_lines_first_day_has_no_trends():
         "## waiting on you", "Claude has not had to wait on you"]
 
 
-def test_session_stats_line():
+def test_session_stats_line_shows_on_every_card():
     day = {"by_session": {"a": {"prompts": 3, "work_s": 2400}, "b": {"prompts": 1, "work_s": 20}}}
-    assert w.session_stats_line(day, "a") == "today: 3 prompts, worked 40 min"
-    assert w.session_stats_line(day, "b") == "today: 1 prompt"
-    assert w.session_stats_line(day, "c") is None
+    assert w.session_stats_line(day, "a") == "today: 3 prompts · worked 40 min"
+    assert w.session_stats_line(day, "b") == "today: 1 prompt · worked 20 s"
+    assert w.session_stats_line(day, "c") == "today: 0 prompts · worked 0 s"
+    assert w.session_stats_line({}, "c") == "today: 0 prompts · worked 0 s"
 
 
 def test_card_at_returns_stats_over_the_header():

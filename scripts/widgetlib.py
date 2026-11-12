@@ -1078,13 +1078,7 @@ def stats_lines(data, key=None, labels=None):
 
 
 def session_stats_line(day, sid):
-    """One line for a card's tooltip: this session's share of today."""
+    """One line for a card's tooltip: this session's share of today. Every card
+    gets it, zeros included, so cards are easy to compare."""
     b = (day.get("by_session") or {}).get(sid) or {}
-    if not b:
-        return None
-    parts = []
-    if b.get("prompts"):
-        parts.append(_plural(b["prompts"], "prompt"))
-    if b.get("work_s", 0) >= 60:
-        parts.append(f"worked {duration_text(b['work_s'])}")
-    return "today: " + ", ".join(parts) if parts else None
+    return f"today: {_plural(b.get('prompts', 0), 'prompt')} · worked {duration_text(b.get('work_s', 0))}"

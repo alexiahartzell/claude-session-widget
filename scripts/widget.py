@@ -285,9 +285,7 @@ class Widget:
             lines.append(folder.replace(w.HOME, "~", 1))
         for a in s.get("agents") or []:
             lines.append(f"agent: {a.get('desc')}" + (" (background)" if a.get("bg") else ""))
-        mine = w.session_stats_line(day, card)
-        if mine:
-            lines.append(mine)
+        lines.append(w.session_stats_line(day, card))
         self.show_lines(lines)
 
     def show_lines(self, lines):
