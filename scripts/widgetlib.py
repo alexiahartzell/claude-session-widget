@@ -105,9 +105,10 @@ def truncate_task(prompt, n=60):
 
 
 def display_label(session):
-    """Manual name, else Claude Code's own AI title for the chat, else the folder."""
+    """Manual name, else Claude Code's own AI title for the chat (from the
+    transcript, or from the Terminal tab when no transcript is found), else the folder."""
     return (session.get("label_override") or session.get("title")
-            or session.get("label") or "?")
+            or session.get("tab_title") or session.get("label") or "?")
 
 
 def subtitle(session):
@@ -119,7 +120,112 @@ def subtitle(session):
         return f"waiting on {session['armed']}" + (f" · {task}" if task else "")
     if status in ("working", "permission") and session.get("activity"):
         return session["activity"]
-    return task or f"{session.get('color_name') or 'grey' } tab"
+    return session.get("summary") or task or f"{session.get('color_name') or 'grey' } tab"
+
+
+# ---- Claude's own spinner, read from the Terminal tab title ----
+# Claude Code puts a spinning half-circle in front of the tab title while it
+# works and a ✳ while it waits. That is the most direct busy signal there is,
+# and it keeps working when a hook is missed (Escape, reloaded hooks).
+
+TAB_BUSY = set("◐◓◑◒")
+TAB_IDLE = "✳"
+IDLE_HOLD_S = 4        # spinner gone this long before a working card flips
+BUSY_HOLD_S = 2        # spinner running this long before a waiting card flips
+
+
+def parse_tab_titles(text):
+    """'tty<TAB>title' lines -> {tty: (state, title)}; state is busy, idle or None."""
+    out = {}
+    for line in (text or "").splitlines():
+        tty, _, title = line.partition("\t")
+        if not tty.startswith("/dev/"):
+            continue
+        title = title.strip()
+        head = title[:1]
+        if head in TAB_BUSY:
+            out[tty] = ("busy", title[1:].strip())
+        elif head == TAB_IDLE:
+            out[tty] = ("idle", title[1:].strip())
+        else:
+            out[tty] = (None, "")
+    return out
+
+
+def reconcile(session, state, held_s):
+    """Fields that bring a card in line with the tab's spinner, or None."""
+    status = session.get("status")
+    if state == "idle" and held_s >= IDLE_HOLD_S and status == "working":
+        return {"status": "watching"} if session.get("armed") else {"status": "needs_input"}
+    if state == "busy" and held_s >= BUSY_HOLD_S:
+        if status in ("idle", "needs_input"):
+            return {"status": "working"}
+        if status == "watching":
+            return {"status": "working", "armed": None}
+    return None
+
+
+# ---- a short summary of the conversation, written by a small model ----
+
+PROMPT_MEMORY = 6
+SUMMARY_RETRY_S = 120
+
+
+def remember_prompt(prompts, prompt):
+    text = re.sub(r"\s+", " ", prompt or "").strip()[:300]
+    out = list(prompts or [])
+    if text:
+        out.append(text)
+    return out[-PROMPT_MEMORY:]
+
+
+def should_summarise(session, now=None):
+    now = time.time() if now is None else now
+    if not session.get("prompts"):
+        return False
+    if session.get("summary_for") == session.get("prompt_count"):
+        return False
+    started = session.get("summary_started")
+    return not started or now - _num(started) > SUMMARY_RETRY_S
+
+
+def summary_request(session):
+    lines = [
+        "Below are the recent requests a user typed into a coding assistant session.",
+        "Write one line of at most eight words saying what the session is working on now.",
+        "Describe the work, not the user. Start with a verb ending in -ing. No quotes, no final full stop.",
+        "Reply with the line only.",
+        "",
+    ]
+    if session.get("title"):
+        lines.append(f"Session title: {session['title']}")
+    for i, p in enumerate(session.get("prompts") or [], 1):
+        lines.append(f"Request {i}: {p}")
+    if session.get("activity"):
+        lines.append(f"Last step: {session['activity']}")
+    return "\n".join(lines)
+
+
+WIDGET_CONFIG = os.path.join(WIDGET_DIR, "config.json")
+
+
+def summaries_enabled(path=None):
+    return (_read_json(path or WIDGET_CONFIG) or {}).get("summaries", True)
+
+
+def set_summaries(on, path=None):
+    path = path or WIDGET_CONFIG
+    cfg = _read_json(path) or {}
+    cfg["summaries"] = bool(on)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(cfg, f)
+
+
+def clean_summary(text):
+    line = (text or "").strip().splitlines()[0] if (text or "").strip() else ""
+    line = line.strip().strip('"\'`').rstrip(".").strip()
+    return _short(line, 70)
 
 
 def _short(text, n=60):

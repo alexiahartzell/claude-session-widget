@@ -7,7 +7,7 @@ spec.loader.exec_module(ss)
 import widgetlib as w
 
 
-def run(tmp_path, payload, tty="/dev/ttys008", calls=None):
+def run(tmp_path, payload, tty="/dev/ttys008", calls=None, summarise=None):
     calls = calls if calls is not None else []
     return ss.handle(
         payload,
@@ -17,6 +17,7 @@ def run(tmp_path, payload, tty="/dev/ttys008", calls=None):
         tty=tty,
         notify=lambda title, msg: calls.append(("notify", title, msg)),
         launch=lambda: calls.append(("launch",)),
+        summarise=summarise or (lambda sid: None),
     ), calls
 
 
@@ -286,3 +287,24 @@ def test_prompt_clears_armed(tmp_path):
     run(tmp_path, {"hook_event_name": "Stop", "session_id": "s1"})
     new, _ = run(tmp_path, {"hook_event_name": "UserPromptSubmit", "session_id": "s1", "prompt": "next"})
     assert new["status"] == "working" and "armed" not in new
+
+
+def test_prompts_are_remembered_for_the_summary(tmp_path):
+    _armed_session(tmp_path)
+    new, _ = run(tmp_path, {"hook_event_name": "UserPromptSubmit", "session_id": "s1", "prompt": "second thing"})
+    assert new["prompts"] == ["run the calc", "second thing"] and new["prompt_count"] == 2
+
+
+def test_tool_call_after_permission_means_working_again(tmp_path):
+    _armed_session(tmp_path)
+    run(tmp_path, {"hook_event_name": "Notification", "session_id": "s1", "notification_type": "permission_prompt"})
+    new, _ = run(tmp_path, {"hook_event_name": "PostToolUse", "session_id": "s1", "tool_name": "Bash",
+                            "tool_input": {"command": "ls"}})
+    assert new["status"] == "working"
+
+
+def test_stop_starts_a_summary(tmp_path):
+    started = []
+    _armed_session(tmp_path)
+    run(tmp_path, {"hook_event_name": "Stop", "session_id": "s1"}, summarise=started.append)
+    assert started == ["s1"]

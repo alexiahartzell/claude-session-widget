@@ -36,6 +36,7 @@ Each card is one Claude Code session.
 
 - **The title** is the name Claude Code gives the chat. Before it has one, the card shows the project folder name.
 - **The second line** starts with the project, in the card's colour. The project is the git checkout the session started in, or else its folder. Then comes what Claude is doing right now, such as "Editing loader.py" or "Run the test suite". Once Claude stops, it shows the start of your last prompt, or what Claude is waiting on.
+- **After Claude stops,** the second line shows a one-line summary of the conversation instead of your last prompt. A small model (Haiku, through your own `claude` command) writes it after each reply. Turn it off with `/widget summary off`.
 - **The pill on the right** is the session's status. Under it is how long the session has been in that status, so you can see which one has waited longest.
 
 | Status | Meaning | Card |
@@ -47,6 +48,8 @@ Each card is one Claude Code session.
 | **idle** | Nothing is happening in this session. | Steady |
 
 Sessions that need you always sort to the top.
+
+**Statuses stay right even when a hook is missed.** Claude Code animates a symbol at the start of the Terminal tab title while it works, and shows ✳ while it waits. The panel reads the tab titles every second or two and corrects a card that disagrees, for example after you press Escape. It never hides a permission prompt.
 
 ---
 

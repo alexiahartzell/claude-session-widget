@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import widgetlib as w
 
 LOG = os.path.join(w.WIDGET_DIR, "hooks.log")
-USAGE = "usage: /session-widget:widget [show | hide | quit | name <text>]"
+USAGE = "usage: /session-widget:widget [show | hide | quit | name <text> | summary on|off]"
 
 def armed_by(payload):
     """What a PostToolUse event leaves Claude waiting on, or None."""
@@ -54,7 +54,7 @@ def _base_fields(payload, pid, tty, tint_dir):
             "cwd": cwd, "label": os.path.basename(cwd.rstrip("/")) or cwd}
 
 
-def handle(payload, *, sessions_dir, tint_dir, pid, tty, notify, launch):
+def handle(payload, *, sessions_dir, tint_dir, pid, tty, notify, launch, summarise=lambda sid: None):
     event = payload.get("hook_event_name")
     sid = payload.get("session_id")
     if not sid or not event:
@@ -72,13 +72,20 @@ def handle(payload, *, sessions_dir, tint_dir, pid, tty, notify, launch):
         if payload.get("source", "startup") == "startup" or not existing:
             fields.update(status="idle", task="")
     elif event == "UserPromptSubmit":
+        cur = w.load_session(sessions_dir, sid) or {}
         fields = {"status": "working", "task": w.truncate_task(payload.get("prompt", "")),
-                  "armed": None, "activity": None}
+                  "armed": None, "activity": None,
+                  "prompts": w.remember_prompt(cur.get("prompts"), payload.get("prompt", "")),
+                  "prompt_count": int(cur.get("prompt_count") or 0) + 1}
     elif event == "PostToolUse":
         what = armed_by(payload)
-        if not what:
+        cur = w.load_session(sessions_dir, sid) or {}
+        if cur.get("status") == "permission":
+            fields = {"status": "working"}  # the tool ran, so the prompt was answered
+        elif not what:
             return None
-        fields = {"armed": what}
+        if what:
+            fields["armed"] = what
     elif event == "PreToolUse":
         cur = w.load_session(sessions_dir, sid)
         if cur is None:
@@ -86,6 +93,8 @@ def handle(payload, *, sessions_dir, tint_dir, pid, tty, notify, launch):
         fields = {"activity": w.activity_text(payload.get("tool_name"), payload.get("tool_input"))}
         if cur.get("status") == "watching":
             fields.update(status="working", armed=None)   # the watcher fired, Claude resumed
+        elif cur.get("status") in ("permission", "needs_input", "idle"):
+            fields.update(status="working")               # a new step means Claude is busy again
         elif fields["activity"] == cur.get("activity"):
             return None                      # same step again: skip the write
         else:
@@ -122,7 +131,16 @@ def handle(payload, *, sessions_dir, tint_dir, pid, tty, notify, launch):
     was = (old or {}).get("status")
     if new["status"] in w.ATTENTION and was != new["status"]:
         notify(*w.attention_message(new))
+    if event == "Stop" and w.summaries_enabled() and w.should_summarise(new):
+        summarise(sid)
     return new
+
+
+def start_summary(sid):
+    """Run summarise.py in the background so the hook returns at once."""
+    subprocess.Popen([sys.executable, os.path.join(w.CODE_DIR, "summarise.py"), sid],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                     stdin=subprocess.DEVNULL, start_new_session=True, env=w.clean_env())
 
 
 def resolve_process(me, ps=None):
@@ -145,6 +163,9 @@ def cmd(args, *, sessions_dir, widget_dir, tty, pid=None):
         with open(os.path.join(widget_dir, "command"), "w") as f:
             f.write(word)
         return f"widget: {word}"
+    if word == "summary" and rest[:1] in (["on"], ["off"]):
+        w.set_summaries(rest[0] == "on")
+        return f"widget: conversation summaries {rest[0]}"
     if word == "name":
         text = " ".join(rest).strip()
         sessions = w.load_sessions(sessions_dir)
@@ -169,7 +190,7 @@ def main(argv):
     payload = json.loads(raw or "{}")
     handle(payload, sessions_dir=w.SESSIONS_DIR, tint_dir=w.TINT_DIR, pid=pid, tty=tty,
            notify=w.notify_mac,
-           launch=lambda: ensure_widget_running(w.WIDGET_DIR))
+           launch=lambda: ensure_widget_running(w.WIDGET_DIR), summarise=start_summary)
 
 
 if __name__ == "__main__":

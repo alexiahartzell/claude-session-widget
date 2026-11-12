@@ -600,3 +600,75 @@ def test_subtitle_shows_live_activity_while_working_or_asking():
     s["status"] = "needs_input"
     assert w.subtitle(s) == "fix the plot"
     assert w.subtitle({"status": "working", "task": "fix the plot"}) == "fix the plot"
+
+
+# ---- reading Claude's own spinner from the Terminal tab title ----
+
+def test_parse_tab_titles():
+    text = "/dev/ttys000\t◐ Lib-drop PDF import\n/dev/ttys001\t✳ Widget work\n/dev/ttys002\tuser@host:~\n\n"
+    got = w.parse_tab_titles(text)
+    assert got["/dev/ttys000"] == ("busy", "Lib-drop PDF import")
+    assert got["/dev/ttys001"] == ("idle", "Widget work")
+    assert got["/dev/ttys002"] == (None, "")
+
+
+def test_reconcile_stuck_working_becomes_needs_input():
+    s = {"status": "working"}
+    assert w.reconcile(s, "idle", held_s=1) is None              # a blink between steps
+    assert w.reconcile(s, "idle", held_s=5) == {"status": "needs_input"}
+    assert w.reconcile(dict(s, armed="a timer"), "idle", held_s=5) == {"status": "watching"}
+
+
+def test_reconcile_spinner_means_working():
+    assert w.reconcile({"status": "needs_input"}, "busy", held_s=3) == {"status": "working"}
+    assert w.reconcile({"status": "idle"}, "busy", held_s=3) == {"status": "working"}
+    assert w.reconcile({"status": "watching", "armed": "a timer"}, "busy", held_s=3) == {"status": "working", "armed": None}
+    assert w.reconcile({"status": "permission"}, "busy", held_s=30) is None   # never hide a permission prompt
+    assert w.reconcile({"status": "working"}, "busy", held_s=30) is None
+    assert w.reconcile({"status": "working"}, None, held_s=30) is None        # not a Claude tab, or not Terminal
+
+
+def test_tab_title_is_a_label_fallback():
+    assert w.display_label({"label": "work", "tab_title": "Widget polish"}) == "Widget polish"
+    assert w.display_label({"label": "work", "tab_title": "Widget polish", "title": "AI title"}) == "AI title"
+
+
+# ---- conversation summary ----
+
+def test_remember_prompt_keeps_the_last_few():
+    got = []
+    for i in range(10):
+        got = w.remember_prompt(got, f"prompt {i} " + "x" * 400)
+    assert len(got) == w.PROMPT_MEMORY and got[-1].startswith("prompt 9")
+    assert all(len(p) <= 300 for p in got)
+    assert w.remember_prompt(None, "   ") == []
+
+
+def test_should_summarise():
+    s = {"prompts": ["a", "b"], "prompt_count": 2}
+    assert w.should_summarise(s, now=100.0)
+    assert not w.should_summarise(dict(s, summary_for=2), now=100.0)            # already up to date
+    assert not w.should_summarise(dict(s, summary_started=80.0), now=100.0)     # one is running
+    assert w.should_summarise(dict(s, summary_started=10.0), now=200.0)         # that one died
+    assert not w.should_summarise({"prompts": []}, now=100.0)
+
+
+def test_summary_request_mentions_prompts_and_title():
+    req = w.summary_request({"title": "Widget polish", "prompts": ["add a timer", "fix the status"],
+                             "activity": "Editing widget.py"})
+    assert "Widget polish" in req and "add a timer" in req and "fix the status" in req
+
+
+def test_clean_summary():
+    assert w.clean_summary('"Fixing stuck widget statuses."\n') == "Fixing stuck widget statuses"
+    assert w.clean_summary("") == ""
+    assert len(w.clean_summary("word " * 40)) <= 70
+
+
+def test_subtitle_prefers_summary_once_claude_stops():
+    s = {"status": "needs_input", "task": "fix it", "summary": "Fixing stuck widget statuses"}
+    assert w.subtitle(s) == "Fixing stuck widget statuses"
+    s.update(status="working", activity="Editing widget.py")
+    assert w.subtitle(s) == "Editing widget.py"
+    s.pop("activity")
+    assert w.subtitle(s) == "Fixing stuck widget statuses"

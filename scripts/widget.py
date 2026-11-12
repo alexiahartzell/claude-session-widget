@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Always-on-top panel listing live Claude Code sessions. Reads <widget home>/sessions."""
-import json, os, subprocess, sys, time
+import json, os, subprocess, sys, threading, time
 import tkinter as tk
 import tkinter.font as tkfont
 
@@ -8,6 +8,16 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import widgetlib as w
 
 POLL_MS = 500
+TAB_POLL_S = 1.5      # how often to read the Terminal tab titles
+TAB_SCRIPT = '''set out to ""
+tell application "Terminal"
+repeat with wnd in windows
+repeat with t in tabs of wnd
+set out to out & (tty of t) & tab & (custom title of t) & linefeed
+end repeat
+end repeat
+end tell
+return out'''
 PULSE_MS = 600
 EMPTY_HIDE_S = 30
 W_PX = 350            # panel width
@@ -46,6 +56,38 @@ end repeat
 end tell'''
     subprocess.Popen(["osascript", "-e", script],
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+class TabWatcher(threading.Thread):
+    """Reads every Terminal tab's title in the background, so a slow
+    AppleScript call never freezes the panel. Remembers how long each tab's
+    spinner state has held."""
+    def __init__(self):
+        super().__init__(daemon=True)
+        self.lock = threading.Lock()
+        self.tabs = {}                  # tty -> (state, title, since)
+
+    def run(self):
+        while True:
+            try:
+                if subprocess.run(["pgrep", "-x", "Terminal"], capture_output=True).returncode == 0:
+                    out = subprocess.run(["osascript", "-e", TAB_SCRIPT], capture_output=True,
+                                         text=True, timeout=5).stdout
+                    self.update(w.parse_tab_titles(out))
+            except Exception as e:
+                log(f"tabs: {e!r}")
+            time.sleep(TAB_POLL_S)
+
+    def update(self, parsed):
+        now = time.time()
+        with self.lock:
+            old = self.tabs
+            self.tabs = {tty: (st, title, old[tty][2] if tty in old and old[tty][0] == st else now)
+                         for tty, (st, title) in parsed.items()}
+
+    def snapshot(self):
+        with self.lock:
+            return dict(self.tabs)
 
 
 def rounded(canvas, x1, y1, x2, y2, r, **kw):
@@ -106,6 +148,8 @@ class Widget:
 
         self.restore_pos()
         self.write_pid()
+        self.tabs = TabWatcher()
+        self.tabs.start()
         self.root.protocol("WM_DELETE_WINDOW", self.hide)
         self.root.after(100, self.tick)
         self.root.after(PULSE_MS, self.pulse)
@@ -214,6 +258,7 @@ class Widget:
                 w.notify_mac(*w.attention_message(s))
             w.refresh_titles(w.SESSIONS_DIR)
             w.refresh_tints(w.SESSIONS_DIR)
+            self.apply_tabs()
             sessions = w.cleanup(w.SESSIONS_DIR)
             self.handle_attention(sessions)
             self.handle_empty(sessions)
@@ -227,6 +272,30 @@ class Widget:
         except Exception as e:
             log(f"tick: {e!r}")
         self.root.after(POLL_MS, self.tick)
+
+    def apply_tabs(self):
+        """Correct statuses from Claude's spinner in each tab, and fill in titles."""
+        tabs = self.tabs.snapshot()
+        if not tabs:
+            return
+        now = time.time()
+        for s in w.load_sessions(w.SESSIONS_DIR):
+            tab = tabs.get(s.get("tty"))
+            if not tab:
+                continue
+            state, title, since = tab
+            # Count only the time since the card last changed, so a prompt you just
+            # sent is not flipped back by a spinner that has not started yet.
+            held = now - max(since, w._num(s.get("status_since") or s.get("updated")))
+            fix = w.reconcile(s, state, held)
+            if title and title != s.get("tab_title"):
+                w.update_session_fn(w.SESSIONS_DIR, s["session_id"],
+                                    lambda cur: {"tab_title": title}, touch=False)
+            if fix:
+                log(f"tab says {state}: {s['session_id'][:8]} {s.get('status')} -> {fix['status']}")
+                _, new = w.update_session(w.SESSIONS_DIR, s["session_id"], **fix)
+                if new.get("status") in w.ATTENTION:
+                    w.notify_mac(*w.attention_message(new))
 
     def handle_attention(self, sessions):
         current = {(s["session_id"], s.get("updated")) for s in sessions
