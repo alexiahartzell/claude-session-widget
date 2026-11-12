@@ -23,7 +23,7 @@ end tell
 return out'''
 PULSE_MS = 600
 EMPTY_HIDE_S = 30
-W_PX = 350            # panel width
+W_PX = 380            # panel width
 PAD = 10              # inner padding
 CARD_H = 58           # minimum card height
 LINE_H = 18           # title line height
@@ -356,21 +356,6 @@ class Widget:
             text = text[:-1]
         return text.rstrip() + "…"
 
-    def title_lines(self, text, max_px):
-        """Wrap a title onto at most two lines at word boundaries, no ellipsis."""
-        words = text.split()
-        lines, cur = [], ""
-        for wd in words:
-            trial = (cur + " " + wd).strip()
-            if self.f_label.measure(trial) <= max_px or not cur:
-                cur = trial
-            else:
-                lines.append(cur)
-                cur = wd
-        if cur:
-            lines.append(cur)
-        return lines[:2]
-
     def draw_card(self, s, y):
         """Draw one session card at y; returns its height."""
         c = self.c
@@ -384,8 +369,8 @@ class Widget:
         pill_x2 = x2 - 14
         text_x = x1 + 18
         text_w = (pill_x2 - self.pill_w - 12) - text_x
-        lines = self.title_lines(w.display_label(s), text_w)
-        h = CARD_H + LINE_H * (len(lines) - 1)
+        lines = [self.fit(w.display_label(s), self.f_label, text_w)]   # always one line
+        h = CARD_H
         card_fill = "#" + w.card_fill(color, th["bg"][1:], self.mode)
         glow = rounded(c, x1 - 2, y - 2, x2 + 2, y + h + 2, RADIUS + 2,
                        fill="", outline=vivid if attention else "", width=3, tags=(tag,))

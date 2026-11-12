@@ -662,7 +662,7 @@ def test_summary_request_mentions_prompts_and_title():
 def test_clean_summary():
     assert w.clean_summary('"Fixing stuck widget statuses."\n') == "Fixing stuck widget statuses"
     assert w.clean_summary("") == ""
-    assert len(w.clean_summary("word " * 40)) <= 70
+    assert len(w.clean_summary("word " * 40)) <= 40
 
 
 def test_summary_becomes_the_headline():

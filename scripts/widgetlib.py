@@ -193,7 +193,7 @@ def should_summarise(session, now=None):
 def summary_request(session):
     lines = [
         "Below are the most recent requests a user typed into a coding assistant session, oldest first.",
-        "Write one line of at most eight words (under 60 characters) naming the overall piece of work the session is on now.",
+        "Write a title of at most five words (under 30 characters) naming the overall piece of work the session is on now.",
         "Weigh the latest requests most. Name the goal, not a single small step.",
         "Start with a verb ending in -ing. No quotes, no final full stop. Reply with the line only.",
         "",
@@ -222,7 +222,7 @@ def set_summaries(on, path=None):
 def clean_summary(text):
     line = (text or "").strip().splitlines()[0] if (text or "").strip() else ""
     line = line.strip().strip('"\'`').rstrip(".").strip()
-    return _short(line, 70)
+    return _short(line, 40)
 
 
 def _short(text, n=60):
