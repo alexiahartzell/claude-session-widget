@@ -127,8 +127,8 @@ There are fifteen colour schemes, and each comes in a dark and a light version. 
 | --- | --- | --- |
 | **muted** | 10 | Quiet, low-saturation colours. The default. |
 | **jewel** | 10 | Richer sapphires, emeralds and rubies that are easy to tell apart. |
-| **dusk** | 10 | Twilight purples, roses and evening blues. |
-| **ocean** | 10 | Sea blues, teals and greens. |
+| **dusk** | 10 | Twilight purples and roses, with sunset orange and amber. |
+| **ocean** | 10 | Sea blues and teals, with coral, sand, kelp and urchin. |
 | **colourblind** | 10 | Warm reds and golds, jade, blues, indigo and pinks. |
 | **forest** | 10 | Pines, mosses, bark and mushrooms. |
 | **ember** | 10 | Fire reds, flame oranges, coal and smoke. |

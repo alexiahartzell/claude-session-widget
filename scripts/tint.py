@@ -39,17 +39,15 @@ DARK = {
         ("amber", "3a2805"), ("turquoise", "05302f"), ("jade", "12300a"), ("violet", "2d0a3a"),
         ("copper", "3a1a05"), ("magenta", "3a0a2e"),
     ],
-    # Twilight purples, roses and evening blues.
+    # Twilight purples and roses, with sunset orange and amber.
     "dusk": [
-        ("twilight", "1a1a3e"), ("orchid", "301838"), ("rosewood", "3a1a2a"), ("lagoon", "0f2c38"),
-        ("heather", "2a2040"), ("evening", "1e2442"), ("mauve", "38203a"), ("harbour", "142a40"),
-        ("aubergine", "281430"), ("cerise", "3c142c"),
+        ("twilight", "171a29"), ("orchid", "2a182a"), ("rosewood", "36151e"), ("lagoon", "182e3a"), ("heather", "292637"),
+        ("sunset", "291710"), ("mauve", "2c1f27"), ("amber", "292510"), ("aubergine", "1f0f29"), ("cerise", "360b28"),
     ],
-    # Sea blues, teals and greens.
+    # Sea blues and teals, with coral, sand, kelp and urchin.
     "ocean": [
-        ("abyss", "0a1c30"), ("shallows", "063030"), ("reef", "0b2a3c"), ("kelp", "0e2c22"),
-        ("deep", "15243c"), ("tide", "0a2a33"), ("pearl", "1f2a38"), ("seaglass", "123228"),
-        ("storm", "1a2030"), ("current", "082638"),
+        ("abyss", "0e2342"), ("shallows", "0a3932"), ("coral", "351512"), ("kelp", "2c3a18"), ("deep", "13163f"),
+        ("sand", "352613"), ("urchin", "291532"), ("seaglass", "143823"), ("anemone", "301626"), ("reef", "0d3645"),
     ],
     # Ten hues picked by simulating protanopia, deuteranopia and tritanopia, so
     # every pair of card colours stays as different as ten colours allow for each.
