@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Claude Code hook: keep <widget home>/sessions/<id>.json in sync and launch the widget.
 
-Hook use: stdin JSON from Claude Code (SessionStart, UserPromptSubmit, Stop,
+Hook use: stdin JSON from Claude Code (SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop,
 Notification, SessionEnd). Always exits 0.
 CLI use:  session-state.py cmd show|hide|quit|name <text>
 """
@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import widgetlib as w
 
 LOG = os.path.join(w.WIDGET_DIR, "hooks.log")
-USAGE = "usage: /session-widget:widget [show | hide | quit | name <text>]"
+USAGE = "usage: /session-widget:widget [show | hide | quit | name <text> | summary on|off | mute [minutes] | unmute]"
 
 def armed_by(payload):
     """What a PostToolUse event leaves Claude waiting on, or None."""
@@ -32,7 +32,7 @@ def launch_widget():
     out = open(os.path.join(w.WIDGET_DIR, "widget.log"), "a")
     subprocess.Popen([sys.executable, os.path.join(w.CODE_DIR, "widget.py")],
                      stdout=out, stderr=out, stdin=subprocess.DEVNULL,
-                     start_new_session=True)
+                     start_new_session=True, env=w.clean_env())
 
 
 def ensure_widget_running(widget_dir, launch=launch_widget, alive=w.is_alive):
@@ -54,7 +54,7 @@ def _base_fields(payload, pid, tty, tint_dir):
             "cwd": cwd, "label": os.path.basename(cwd.rstrip("/")) or cwd}
 
 
-def handle(payload, *, sessions_dir, tint_dir, pid, tty, notify, launch):
+def handle(payload, *, sessions_dir, tint_dir, pid, tty, notify, launch, summarise=lambda sid: None):
     event = payload.get("hook_event_name")
     sid = payload.get("session_id")
     if not sid or not event:
@@ -72,20 +72,58 @@ def handle(payload, *, sessions_dir, tint_dir, pid, tty, notify, launch):
         if payload.get("source", "startup") == "startup" or not existing:
             fields.update(status="idle", task="")
     elif event == "UserPromptSubmit":
-        fields = {"status": "working", "task": w.truncate_task(payload.get("prompt", "")), "armed": None}
+        cur = w.load_session(sessions_dir, sid) or {}
+        fields = {"status": "working", "task": w.truncate_task(payload.get("prompt", "")),
+                  "armed": None, "activity": None,
+                  "prompts": w.remember_prompt(cur.get("prompts"), payload.get("prompt", "")),
+                  "prompt_count": int(cur.get("prompt_count") or 0) + 1}
     elif event == "PostToolUse":
         what = armed_by(payload)
-        if not what:
-            return None
-        fields = {"armed": what}
-    elif event == "PreToolUse":
         cur = w.load_session(sessions_dir, sid) or {}
-        if cur.get("status") != "watching":
-            return None                      # normal tool use while working: nothing to record
-        fields = {"status": "working", "armed": None}     # the watcher fired, Claude resumed
+        tool, inp = payload.get("tool_name"), payload.get("tool_input") or {}
+        if tool in w.AGENT_TOOLS and not inp.get("run_in_background") and cur.get("agents"):
+            fields["agents"] = w.agent_returned(cur["agents"], payload.get("tool_use_id"))
+        if cur.get("status") == "permission":
+            fields["status"] = "working"  # the tool ran, so the prompt was answered
+        if what:
+            fields["armed"] = what
+        if not fields:
+            return None
+    elif event == "SubagentStop":
+        log(f"SubagentStop fields: {sorted(payload)}")    # to learn what newer versions send
+        cur = w.load_session(sessions_dir, sid)
+        if not cur or not cur.get("agents"):
+            return None
+        _, new = w.update_session_fn(
+            sessions_dir, sid, lambda c: {"agents": w.agent_stopped(c.get("agents"), payload.get("agent_type"))},
+            touch=False)
+        return new
+    elif event == "PreToolUse":
+        cur = w.load_session(sessions_dir, sid)
+        if cur is None:
+            return None
+        fields = {"activity": w.activity_text(payload.get("tool_name"), payload.get("tool_input"))}
+        if payload.get("cwd"):
+            fields["cwd_now"] = payload["cwd"]
+        if payload.get("tool_name") in w.AGENT_TOOLS:
+            fields["agents"] = w.agent_started(w.prune_agents(cur.get("agents")),
+                                               payload.get("tool_use_id"), payload.get("tool_input"))
+        if cur.get("status") == "watching":
+            fields.update(status="working", armed=None)   # the watcher fired, Claude resumed
+        elif cur.get("status") in ("permission", "needs_input", "idle"):
+            fields.update(status="working")               # a new step means Claude is busy again
+        elif ("agents" not in fields and fields["activity"] == cur.get("activity")
+              and fields.get("cwd_now") == cur.get("cwd_now")):
+            return None                      # same step again: skip the write
+        else:
+            # Only the activity line changes. touch=False keeps the card order steady.
+            _, new = w.update_session_fn(sessions_dir, sid, lambda c: fields, touch=False)
+            return new
     elif event == "Stop":
         cur = w.load_session(sessions_dir, sid) or {}
         fields = {"status": "watching" if cur.get("armed") else "needs_input"}
+        if cur.get("agents"):              # foreground agents are done once Claude stops
+            fields["agents"] = [a for a in w.prune_agents(cur["agents"]) if a.get("bg")]
     elif event == "Notification":
         kind = payload.get("notification_type")
         if kind == "permission_prompt":
@@ -108,12 +146,23 @@ def handle(payload, *, sessions_dir, tint_dir, pid, tty, notify, launch):
         color, name = w.read_tint(tint_dir, tty)
         fields.update(color=color, color_name=name)
     fields["source"] = "hook"
+    if payload.get("cwd"):
+        fields["cwd_now"] = payload["cwd"]          # where the session is now, for the project tag
     old, new = w.update_session(sessions_dir, sid, **fields)
 
     was = (old or {}).get("status")
     if new["status"] in w.ATTENTION and was != new["status"]:
         notify(*w.attention_message(new))
+    if event == "Stop" and w.summaries_enabled() and w.should_summarise(new):
+        summarise(sid)
     return new
+
+
+def start_summary(sid):
+    """Run summarise.py in the background so the hook returns at once."""
+    subprocess.Popen([sys.executable, os.path.join(w.CODE_DIR, "summarise.py"), sid],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                     stdin=subprocess.DEVNULL, start_new_session=True, env=w.clean_env())
 
 
 def resolve_process(me, ps=None):
@@ -136,6 +185,19 @@ def cmd(args, *, sessions_dir, widget_dir, tty, pid=None):
         with open(os.path.join(widget_dir, "command"), "w") as f:
             f.write(word)
         return f"widget: {word}"
+    if word == "mute":
+        try:
+            minutes = int(rest[0]) if rest else 60
+        except ValueError:
+            return USAGE
+        w.mute_banners(minutes)
+        return f"widget: banners muted for {minutes} min" if minutes > 0 else "widget: banners on"
+    if word == "unmute":
+        w.mute_banners(0)
+        return "widget: banners on"
+    if word == "summary" and rest[:1] in (["on"], ["off"]):
+        w.set_summaries(rest[0] == "on")
+        return f"widget: conversation summaries {rest[0]}"
     if word == "name":
         text = " ".join(rest).strip()
         sessions = w.load_sessions(sessions_dir)
@@ -160,7 +222,7 @@ def main(argv):
     payload = json.loads(raw or "{}")
     handle(payload, sessions_dir=w.SESSIONS_DIR, tint_dir=w.TINT_DIR, pid=pid, tty=tty,
            notify=w.notify_mac,
-           launch=lambda: ensure_widget_running(w.WIDGET_DIR))
+           launch=lambda: ensure_widget_running(w.WIDGET_DIR), summarise=start_summary)
 
 
 if __name__ == "__main__":

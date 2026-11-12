@@ -114,9 +114,25 @@ def _lab(h, matrix):
 
 
 def test_colourblind_cards_stay_distinct_for_every_colour_vision_type():
-    accents = [w.accent(h, "dark") for _, h in tint.palette("colourblind", "dark")]
-    for name, matrix in CVD.items():
-        labs = [_lab(a, matrix) for a in accents]
-        closest = min(sum((p - q) ** 2 for p, q in zip(a, b)) ** 0.5
-                      for a, b in itertools.combinations(labs, 2))
-        assert closest > 9, name
+    for mode in ("dark", "light"):
+        accents = [w.accent(h, mode) for _, h in tint.palette("colourblind", mode)]
+        for name, matrix in CVD.items():
+            labs = [_lab(a, matrix) for a in accents]
+            closest = min(sum((p - q) ** 2 for p, q in zip(a, b)) ** 0.5
+                          for a, b in itertools.combinations(labs, 2))
+            assert closest > 12, (mode, name)
+
+
+def test_every_scheme_keeps_every_card_distinct_in_both_modes():
+    """Light-mode cards differ only by hue, so a scheme's hues must stay spread out."""
+    identity = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+    for scheme in tint.DARK:
+        for mode in ("dark", "light"):
+            labs = [_lab(w.accent(h, mode), identity) for _, h in tint.palette(scheme, mode)]
+            closest = min(sum((p - q) ** 2 for p, q in zip(a, b)) ** 0.5
+                          for a, b in itertools.combinations(labs, 2))
+            assert closest > 14, (scheme, mode, closest)
+
+
+def test_every_scheme_is_selectable():
+    assert set(tint.DARK) == set(w.SCHEME_NAMES)

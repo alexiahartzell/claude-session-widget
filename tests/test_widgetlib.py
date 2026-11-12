@@ -255,9 +255,8 @@ def test_mirror_uses_claude_name_as_task(tmp_path):
 
 
 def test_subtitle_falls_back_to_colour_name():
-    assert w.subtitle({"task": "fix plot", "color_name": "plum"}) == "fix plot"
-    assert w.subtitle({"task": "", "color_name": "plum"}) == "plum tab"
-    assert w.subtitle({}) == "grey tab"
+    assert w.subtitle({"task": "fix plot", "color_name": "plum"}) == ""     # idle: nothing happening now
+    assert w.subtitle({}) == ""
 
 
 # ---- review fixes ----
@@ -324,7 +323,7 @@ def test_single_instance_lock(tmp_path):
 
 
 def test_subtitle_while_watching_names_what_it_waits_on():
-    assert w.subtitle({"status": "watching", "armed": "a watcher", "task": "run the calc"}) == "waiting on a watcher · run the calc"
+    assert w.subtitle({"status": "watching", "armed": "a watcher", "task": "run the calc"}) == "waiting on a watcher"
     assert w.subtitle({"status": "watching", "armed": "a subagent", "task": ""}) == "waiting on a subagent"
 
 
@@ -378,7 +377,7 @@ def test_armed_in_transcript_rearmed_after_notification(tmp_path):
         _user("run the calc"),
         _assistant(_tool("Bash", command="python3 calc.py", run_in_background=True)), _tool_result(),
         _user("<task-notification>done</task-notification>"),
-        _assistant(_tool("Agent", prompt="review")), _tool_result()))
+        _assistant(_tool("Agent", prompt="review", run_in_background=True)), _tool_result()))
     assert w.armed_in_transcript(str(f)) == "a subagent"
 
 
@@ -490,3 +489,272 @@ def test_refresh_titles_updates_only_when_transcript_changed(tmp_path):
     os.utime(tr, (2, 2))
     w.refresh_titles(se, projects_dir=str(tmp_path / "projects"))
     assert w.load_session(se, "sid-a")["title"] == "Second"
+
+
+# ---- waiting timer ----
+
+def test_status_since_set_on_first_status_and_on_change(tmp_path):
+    d = str(tmp_path / "sessions")
+    _, a = w.update_session(d, "s", status="working")
+    assert a["status_since"] == a["updated"]
+    time.sleep(0.01)
+    _, b = w.update_session(d, "s", status="working", task="more")
+    assert b["status_since"] == a["status_since"]           # same status: clock keeps running
+    time.sleep(0.01)
+    _, c = w.update_session(d, "s", status="needs_input")
+    assert c["status_since"] > a["status_since"]
+
+
+def test_status_since_untouched_by_non_status_updates(tmp_path):
+    d = str(tmp_path / "sessions")
+    _, a = w.update_session(d, "s", status="idle")
+    _, b = w.update_session_fn(d, "s", lambda cur: {"color": "112233"}, touch=False)
+    assert b["status_since"] == a["status_since"]
+
+
+def test_mirror_seed_records_status_since(tmp_path):
+    cl, se = tmp_path / "claude", str(tmp_path / "sessions")
+    _claude_record(cl, 3989, "sid-a", "busy")
+    w.mirror_claude_sessions(str(cl), se, tint_dir=str(tmp_path), alive=lambda p: True, tty_of=lambda p: None)
+    s = w.load_session(se, "sid-a")
+    assert s["status_since"] == s["updated"]
+
+
+def test_elapsed_text():
+    assert w.elapsed_text({"status_since": 1000.0}, now=1030.0) == "just now"
+    assert w.elapsed_text({"status_since": 1000.0}, now=1000.0 + 5 * 60 + 10) == "5 min"
+    assert w.elapsed_text({"status_since": 1000.0}, now=1000.0 + 2 * 3600 + 7 * 60) == "2 h 7 min"
+    assert w.elapsed_text({"status_since": 1000.0}, now=1000.0 + 3 * 3600) == "3 h"
+    assert w.elapsed_text({"updated": 1000.0}, now=1000.0 + 120) == "2 min"   # older files
+    assert w.elapsed_text({}, now=5.0) == ""
+
+
+# ---- project name ----
+
+def test_project_name_uses_nearest_repo_root(tmp_path):
+    repo = tmp_path / "home" / "work" / "dynamics"
+    (repo / ".git").mkdir(parents=True)
+    deep = repo / "src" / "solver"
+    deep.mkdir(parents=True)
+    w.project_name.cache_clear()
+    assert w.project_name(str(deep), home=str(tmp_path / "home")) == "dynamics"
+
+
+def test_project_name_accepts_worktree_git_file(tmp_path):
+    wt = tmp_path / "home" / "wt-feature"
+    wt.mkdir(parents=True)
+    (wt / ".git").write_text("gitdir: /elsewhere\n")
+    w.project_name.cache_clear()
+    assert w.project_name(str(wt / "a"), home=str(tmp_path / "home")) == "wt-feature"
+
+
+def test_project_name_without_repo_is_folder_name(tmp_path):
+    home = tmp_path / "home"
+    d = home / "notes" / "today"
+    d.mkdir(parents=True)
+    (home / ".git").mkdir()                      # a dotfiles repo at home must not win
+    w.project_name.cache_clear()
+    assert w.project_name(str(d), home=str(home)) == "today"
+    assert w.project_name("", home=str(home)) == ""
+
+
+def test_project_tag_hidden_when_label_already_shows_it():
+    s = {"cwd": "/x/dynamics", "label": "dynamics"}
+    assert w.project_tag(s, name=lambda cwd: "dynamics") == ""
+    s["title"] = "Fit the spectrum"
+    assert w.project_tag(s, name=lambda cwd: "dynamics") == "dynamics"
+
+
+# ---- log noise ----
+
+def test_clean_env_drops_malloc_debug_vars():
+    env = {"PATH": "/bin", "MallocStackLogging": "0", "MallocStackLoggingNoCompact": "1", "HOME": "/h"}
+    assert w.clean_env(env) == {"PATH": "/bin", "HOME": "/h"}
+
+
+# ---- live activity line ----
+
+def test_activity_text_per_tool():
+    a = w.activity_text
+    assert a("Bash", {"command": "pytest -q", "description": "Run the test suite"}) == "Run the test suite"
+    assert a("Bash", {"command": "pytest -q"}) == "Running pytest -q"
+    assert a("Edit", {"file_path": "/x/y/widget.py"}) == "Editing widget.py"
+    assert a("Write", {"file_path": "/x/notes.md"}) == "Writing notes.md"
+    assert a("Read", {"file_path": "/x/README.md"}) == "Reading README.md"
+    assert a("Grep", {"pattern": "foo"}) == "Searching the code"
+    assert a("WebSearch", {"query": "exciton transport"}) == "Searching the web: exciton transport"
+    assert a("WebFetch", {"url": "https://arxiv.org/abs/1"}) == "Reading arxiv.org"
+    assert a("Agent", {"description": "Review the diff"}) == "Agent: Review the diff"
+    assert a("mcp__zotero__search", {}) == "Using zotero"
+    assert a("Mystery", {}) == "Using Mystery"
+    assert len(a("Bash", {"description": "x" * 200})) <= 60
+    assert a(None, None) == ""
+
+
+def test_subtitle_shows_live_activity_while_working_or_asking():
+    s = {"status": "working", "task": "fix the plot", "activity": "Editing plot.py"}
+    assert w.subtitle(s) == "Editing plot.py"
+    s["status"] = "permission"
+    assert w.subtitle(s) == "Editing plot.py"
+    s["status"] = "needs_input"
+    assert w.subtitle(s) == ""                   # your turn: the pill says so, no stale step
+    assert w.subtitle({"status": "working", "task": "fix the plot"}) == "fix the plot"
+
+
+# ---- reading Claude's own spinner from the Terminal tab title ----
+
+def test_parse_tab_titles():
+    text = "/dev/ttys000\t◐ Lib-drop PDF import\n/dev/ttys001\t✳ Widget work\n/dev/ttys002\tuser@host:~\n\n"
+    got = w.parse_tab_titles(text)
+    assert got["/dev/ttys000"] == ("busy", "Lib-drop PDF import")
+    assert got["/dev/ttys001"] == ("idle", "Widget work")
+    assert got["/dev/ttys002"] == (None, "")
+
+
+def test_reconcile_stuck_working_becomes_needs_input():
+    s = {"status": "working"}
+    assert w.reconcile(s, "idle", held_s=1) is None              # a blink between steps
+    assert w.reconcile(s, "idle", held_s=5) == {"status": "needs_input"}
+    assert w.reconcile(dict(s, armed="a timer"), "idle", held_s=5) == {"status": "watching"}
+
+
+def test_reconcile_spinner_means_working():
+    assert w.reconcile({"status": "needs_input"}, "busy", held_s=3) == {"status": "working"}
+    assert w.reconcile({"status": "idle"}, "busy", held_s=3) == {"status": "working"}
+    assert w.reconcile({"status": "watching", "armed": "a timer"}, "busy", held_s=3) == {"status": "working", "armed": None}
+    assert w.reconcile({"status": "permission"}, "busy", held_s=30) is None   # never hide a permission prompt
+    assert w.reconcile({"status": "working"}, "busy", held_s=30) is None
+    assert w.reconcile({"status": "working"}, None, held_s=30) is None        # not a Claude tab, or not Terminal
+
+
+def test_tab_title_is_a_label_fallback():
+    assert w.display_label({"label": "work", "tab_title": "Widget polish"}) == "Widget polish"
+    assert w.display_label({"label": "work", "tab_title": "Widget polish", "title": "AI title"}) == "AI title"
+
+
+# ---- conversation summary ----
+
+def test_remember_prompt_keeps_the_last_few():
+    got = []
+    for i in range(10):
+        got = w.remember_prompt(got, f"prompt {i} " + "x" * 400)
+    assert len(got) == w.PROMPT_MEMORY and got[-1].startswith("prompt 9")
+    assert all(len(p) <= 300 for p in got)
+    assert w.remember_prompt(None, "   ") == []
+
+
+def test_should_summarise():
+    s = {"prompts": ["a", "b"], "prompt_count": 2}
+    assert w.should_summarise(s, now=100.0)
+    assert not w.should_summarise(dict(s, summary_for=2), now=100.0)            # already up to date
+    assert not w.should_summarise(dict(s, summary_started=80.0), now=100.0)     # one is running
+    assert w.should_summarise(dict(s, summary_started=10.0), now=200.0)         # that one died
+    assert not w.should_summarise({"prompts": []}, now=100.0)
+
+
+def test_summary_request_mentions_prompts_and_title():
+    req = w.summary_request({"title": "Widget polish", "prompts": ["add a timer", "fix the status"],
+                             "activity": "Editing widget.py"})
+    assert "add a timer" in req and "fix the status" in req
+    assert "Editing widget.py" not in req          # one step would pull the summary off course
+
+
+def test_clean_summary():
+    assert w.clean_summary('"Fixing stuck widget statuses."\n') == "Fixing stuck widget statuses"
+    assert w.clean_summary("") == ""
+    assert len(w.clean_summary("word " * 40)) <= 40
+
+
+def test_summary_becomes_the_headline():
+    s = {"label": "work", "title": "Lib-drop PDF import", "summary": "Fixing stuck widget statuses"}
+    assert w.display_label(s) == "Fixing stuck widget statuses"
+    assert w.display_label(dict(s, label_override="paper")) == "paper"
+
+
+def test_subtitle_is_empty_when_it_is_your_turn():
+    s = {"status": "needs_input", "title": "Lib-drop PDF import", "summary": "Fixing stuck widget statuses",
+         "task": "last prompt"}
+    assert w.subtitle(s) == ""
+    assert w.subtitle({"status": "needs_input", "title": "Lib-drop PDF import", "task": "last prompt"}) == ""
+
+
+def test_project_follows_where_the_session_is_now():
+    s = {"cwd": "/x/work", "cwd_now": "/x/work/tools/widget", "title": "T"}
+    seen = []
+    w.project_tag(s, name=lambda cwd: seen.append(cwd) or "widget")
+    assert seen == ["/x/work/tools/widget"]
+
+
+# ---- subagent list ----
+
+def test_agents_text():
+    assert w.agents_text([]) == ""
+    assert w.agents_text([{"desc": "Review the diff"}]) == "1 agent · Review the diff"
+    assert w.agents_text([{"desc": "A"}, {"desc": "B"}]) == "2 agents · A, B"
+
+
+def test_prune_agents_drops_old_ones():
+    agents = [{"id": "a", "started": 0.0}, {"id": "b", "started": 9000.0}]
+    assert [a["id"] for a in w.prune_agents(agents, now=10000.0)] == ["b"]
+
+
+def test_agent_stopped_prefers_matching_type_then_foreground():
+    agents = [{"id": "1", "type": "Explore", "bg": True}, {"id": "2", "type": "Plan", "bg": False},
+              {"id": "3", "type": "Explore", "bg": False}]
+    assert [a["id"] for a in w.agent_stopped(agents, "Explore")] == ["2", "3"]
+    assert [a["id"] for a in w.agent_stopped(agents, None)] == ["1", "3"]
+
+
+# ---- muting banners ----
+
+def test_mute_and_unmute(tmp_path):
+    cfg = str(tmp_path / "config.json")
+    assert not w.banners_muted(path=cfg, now=100.0)
+    w.mute_banners(30, path=cfg, now=100.0)
+    assert w.banners_muted(path=cfg, now=100.0 + 29 * 60)
+    assert not w.banners_muted(path=cfg, now=100.0 + 31 * 60)
+    w.mute_banners(0, path=cfg, now=100.0)
+    assert not w.banners_muted(path=cfg, now=101.0)
+
+
+def test_notify_mac_stays_quiet_while_muted(monkeypatch, tmp_path):
+    cfg = str(tmp_path / "config.json")
+    monkeypatch.setattr(w, "WIDGET_CONFIG", cfg)
+    calls = []
+    monkeypatch.setattr(w.subprocess, "Popen", lambda *a, **k: calls.append(a))
+    w.mute_banners(10, path=cfg)
+    w.notify_mac("t", "m")
+    assert calls == []
+    w.mute_banners(0, path=cfg)
+    w.notify_mac("t", "m")
+    assert len(calls) == 1
+
+
+# ---- restarting onto a newer install ----
+
+def _install(tmp_path, version):
+    scripts = tmp_path / "cache" / "session-widget" / version / "scripts"
+    scripts.mkdir(parents=True)
+    (scripts / "widget.py").write_text("")
+    return scripts
+
+
+def test_newer_install_found(tmp_path):
+    old, new = _install(tmp_path, "1.9.0"), _install(tmp_path, "2.0.0")
+    reg = tmp_path / "installed_plugins.json"
+    reg.write_text(json.dumps({"plugins": {"session-widget@session-widget": [
+        {"installPath": str(new.parent), "version": "2.0.0"}]}}))
+    assert w.newer_install(str(reg), str(old)) == str(new)
+    assert w.newer_install(str(reg), str(new)) is None           # already on it
+
+
+def test_newer_install_ignores_dev_checkouts_and_bad_files(tmp_path):
+    new = _install(tmp_path, "2.0.0")
+    reg = tmp_path / "installed_plugins.json"
+    reg.write_text(json.dumps({"plugins": {"session-widget@session-widget": [{"installPath": str(new.parent)}]}}))
+    assert w.newer_install(str(reg), "/Users/x/work/claude-session-widget/scripts") is None
+    reg.write_text("{broken")
+    assert w.newer_install(str(reg), str(tmp_path / "cache" / "x" / "scripts")) is None
+    missing = tmp_path / "gone"
+    reg.write_text(json.dumps({"plugins": {"session-widget@session-widget": [{"installPath": str(missing)}]}}))
+    assert w.newer_install(str(reg), str(new)) is None

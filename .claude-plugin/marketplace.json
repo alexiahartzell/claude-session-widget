@@ -1,6 +1,9 @@
 {
   "name": "session-widget",
-  "owner": { "name": "Alexia Hartzell" },
+  "owner": {
+    "name": "Alexia Hartzell"
+  },
+  "description": "Session panel and tab colours for Claude Code on macOS.",
   "plugins": [
     {
       "name": "session-widget",

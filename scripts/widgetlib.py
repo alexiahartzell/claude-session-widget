@@ -1,5 +1,5 @@
 """Pure helpers shared by the session hook and the widget. No tkinter here."""
-import fcntl, json, os, re, subprocess, tempfile, time
+import fcntl, functools, json, os, re, subprocess, tempfile, time
 
 HOME = os.path.expanduser("~")
 CODE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -77,8 +77,11 @@ def update_session_fn(sessions_dir, session_id, fn, touch=True):
         new.update(fn(dict(new)) or {})
         new = {k: v for k, v in new.items() if v is not None}
         new["session_id"] = session_id
+        now = time.time()
         if touch or "updated" not in new:
-            new["updated"] = time.time()
+            new["updated"] = now
+        if new.get("status") != (old or {}).get("status") or "status_since" not in new:
+            new["status_since"] = now          # the waiting timer restarts on a new status
         write_session(sessions_dir, new)
     finally:
         lock.close()
@@ -102,17 +105,277 @@ def truncate_task(prompt, n=60):
 
 
 def display_label(session):
-    """Manual name, else Claude Code's own AI title for the chat, else the folder."""
-    return (session.get("label_override") or session.get("title")
-            or session.get("label") or "?")
+    """Manual name, else the summary of what the session is doing now, else
+    Claude Code's own title for the chat (from the transcript, or from the
+    Terminal tab when no transcript is found), else the folder."""
+    return (session.get("label_override") or session.get("summary") or session.get("title")
+            or session.get("tab_title") or session.get("label") or "?")
 
 
 def subtitle(session):
-    """Second line of a row: what it waits on, the task, or the tab colour."""
-    task = (session.get("task") or "").strip()
-    if session.get("status") == "watching" and session.get("armed"):
-        return f"waiting on {session['armed']}" + (f" · {task}" if task else "")
-    return task or f"{session.get('color_name') or 'grey' } tab"
+    """Second line of a card: what is happening right now. The step Claude is
+    on while it works, what it waits on while watching, and nothing when it is
+    your turn or idle. The title above says what the session is about."""
+    status = session.get("status")
+    if status == "watching" and session.get("armed"):
+        return f"waiting on {session['armed']}"
+    if status in ("working", "permission"):
+        return session.get("activity") or (session.get("task") or "").strip()
+    return ""
+
+
+# ---- Claude's own spinner, read from the Terminal tab title ----
+# Claude Code puts a spinning half-circle in front of the tab title while it
+# works and a ✳ while it waits. That is the most direct busy signal there is,
+# and it keeps working when a hook is missed (Escape, reloaded hooks).
+
+TAB_BUSY = set("◐◓◑◒")
+TAB_IDLE = "✳"
+IDLE_HOLD_S = 4        # spinner gone this long before a working card flips
+BUSY_HOLD_S = 2        # spinner running this long before a waiting card flips
+
+
+def parse_tab_titles(text):
+    """'tty<TAB>title' lines -> {tty: (state, title)}; state is busy, idle or None."""
+    out = {}
+    for line in (text or "").splitlines():
+        tty, _, title = line.partition("\t")
+        if not tty.startswith("/dev/"):
+            continue
+        title = title.strip()
+        head = title[:1]
+        if head in TAB_BUSY:
+            out[tty] = ("busy", title[1:].strip())
+        elif head == TAB_IDLE:
+            out[tty] = ("idle", title[1:].strip())
+        else:
+            out[tty] = (None, "")
+    return out
+
+
+def reconcile(session, state, held_s):
+    """Fields that bring a card in line with the tab's spinner, or None."""
+    status = session.get("status")
+    if state == "idle" and held_s >= IDLE_HOLD_S and status == "working":
+        return {"status": "watching"} if session.get("armed") else {"status": "needs_input"}
+    if state == "busy" and held_s >= BUSY_HOLD_S:
+        if status in ("idle", "needs_input"):
+            return {"status": "working"}
+        if status == "watching":
+            return {"status": "working", "armed": None}
+    return None
+
+
+# ---- a short summary of the conversation, written by a small model ----
+
+PROMPT_MEMORY = 6
+SUMMARY_RETRY_S = 120
+
+
+def remember_prompt(prompts, prompt):
+    text = re.sub(r"\s+", " ", prompt or "").strip()[:300]
+    out = list(prompts or [])
+    if text:
+        out.append(text)
+    return out[-PROMPT_MEMORY:]
+
+
+def should_summarise(session, now=None):
+    now = time.time() if now is None else now
+    if not session.get("prompts"):
+        return False
+    if session.get("summary_for") == session.get("prompt_count"):
+        return False
+    started = session.get("summary_started")
+    return not started or now - _num(started) > SUMMARY_RETRY_S
+
+
+def summary_request(session):
+    lines = [
+        "Below are the most recent requests a user typed into a coding assistant session, oldest first.",
+        "Write a title of at most five words (under 30 characters) naming the overall piece of work the session is on now.",
+        "Weigh the latest requests most. Name the goal, not a single small step.",
+        "Start with a verb ending in -ing. No quotes, no final full stop. Reply with the line only.",
+        "",
+    ]
+    for i, p in enumerate(session.get("prompts") or [], 1):
+        lines.append(f"Request {i}: {p}")
+    return "\n".join(lines)
+
+
+WIDGET_CONFIG = os.path.join(WIDGET_DIR, "config.json")
+
+
+def summaries_enabled(path=None):
+    return (_read_json(path or WIDGET_CONFIG) or {}).get("summaries", True)
+
+
+def set_summaries(on, path=None):
+    path = path or WIDGET_CONFIG
+    cfg = _read_json(path) or {}
+    cfg["summaries"] = bool(on)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(cfg, f)
+
+
+def _config(path):
+    return _read_json(path or WIDGET_CONFIG) or {}
+
+
+def _save_config_field(path, **fields):
+    path = path or WIDGET_CONFIG
+    cfg = dict(_config(path), **fields)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(cfg, f)
+
+
+def mute_banners(minutes, path=None, now=None):
+    """Silence macOS banners for this many minutes; 0 unmutes. Cards still pulse."""
+    now = time.time() if now is None else now
+    _save_config_field(path, mute_until=now + minutes * 60 if minutes > 0 else 0)
+
+
+def mute_until(path=None):
+    return _num(_config(path).get("mute_until"))
+
+
+def banners_muted(path=None, now=None):
+    return mute_until(path) > (time.time() if now is None else now)
+
+
+# ---- subagents ----
+
+AGENT_TOOLS = ("Agent", "Task")
+AGENT_MAX_AGE_S = 2 * 3600
+
+
+def agent_started(agents, tool_use_id, inp, now=None):
+    inp = inp if isinstance(inp, dict) else {}
+    out = [a for a in (agents or []) if a.get("id") != tool_use_id]
+    out.append({"id": tool_use_id or f"agent-{time.time()}", "desc": _short(inp.get("description") or "working", 50),
+                "type": inp.get("subagent_type") or "", "bg": bool(inp.get("run_in_background")),
+                "started": time.time() if now is None else now})
+    return out
+
+
+def agent_returned(agents, tool_use_id):
+    return [a for a in (agents or []) if a.get("id") != tool_use_id]
+
+
+def agent_stopped(agents, agent_type):
+    """SubagentStop does not say which call it was. Drop the oldest agent of the
+    same type, else the oldest foreground one, else the oldest of all."""
+    agents = list(agents or [])
+    pick = ([a for a in agents if agent_type and a.get("type") == agent_type]
+            or [a for a in agents if not a.get("bg")] or agents)
+    if pick:
+        agents.remove(pick[0])
+    return agents
+
+
+def prune_agents(agents, now=None):
+    now = time.time() if now is None else now
+    return [a for a in (agents or []) if now - _num(a.get("started")) < AGENT_MAX_AGE_S]
+
+
+def agents_text(agents):
+    agents = agents or []
+    if not agents:
+        return ""
+    n = len(agents)
+    return f"{n} agent{'s' if n > 1 else ''} · " + ", ".join(a.get("desc", "") for a in agents)
+
+
+def clean_summary(text):
+    line = (text or "").strip().splitlines()[0] if (text or "").strip() else ""
+    line = line.strip().strip('"\'`').rstrip(".").strip()
+    return _short(line, 40)
+
+
+def _short(text, n=60):
+    text = re.sub(r"\s+", " ", str(text or "")).strip()
+    return text if len(text) <= n else text[:n - 1].rstrip() + "…"
+
+
+def activity_text(tool_name, tool_input):
+    """A short plain-words line for the tool call Claude is about to make."""
+    if not tool_name:
+        return ""
+    inp = tool_input if isinstance(tool_input, dict) else {}
+    base = lambda key: os.path.basename(str(inp.get(key) or "").rstrip("/"))
+    if tool_name == "Bash":
+        if inp.get("description"):
+            return _short(inp["description"])
+        return _short("Running " + str(inp.get("command") or "a command"))
+    if tool_name in ("Edit", "MultiEdit", "NotebookEdit"):
+        return _short("Editing " + (base("file_path") or base("notebook_path") or "a file"))
+    if tool_name == "Write":
+        return _short("Writing " + (base("file_path") or "a file"))
+    if tool_name == "Read":
+        return _short("Reading " + (base("file_path") or "a file"))
+    if tool_name in ("Grep", "Glob"):
+        return "Searching the code"
+    if tool_name == "WebSearch":
+        return _short("Searching the web: " + str(inp.get("query") or ""))
+    if tool_name == "WebFetch":
+        host = re.sub(r"^[a-z]+://", "", str(inp.get("url") or "")).split("/")[0]
+        return _short("Reading " + (host or "a web page"))
+    if tool_name in ("Agent", "Task"):
+        return _short("Agent: " + str(inp.get("description") or "working"))
+    if tool_name == "Skill":
+        return _short("Using skill " + str(inp.get("skill") or ""))
+    if tool_name.startswith("mcp__"):
+        return _short("Using " + tool_name.split("__")[1])
+    return _short("Using " + tool_name)
+
+
+def elapsed_text(session, now=None):
+    """How long the session has been in its current status, in plain words."""
+    since = session.get("status_since") or session.get("updated")
+    if not since:
+        return ""
+    secs = max(0, (time.time() if now is None else now) - _num(since))
+    mins = int(secs // 60)
+    if mins < 1:
+        return "just now"
+    if mins < 60:
+        return f"{mins} min"
+    h, m = divmod(mins, 60)
+    return f"{h} h {m} min" if m else f"{h} h"
+
+
+@functools.lru_cache(maxsize=256)
+def project_name(cwd, home=HOME):
+    """The project a folder belongs to: the nearest enclosing git checkout
+    (a .git folder or worktree file), else the folder's own name. A repo at
+    home itself, such as dotfiles, does not count."""
+    if not cwd:
+        return ""
+    path = os.path.abspath(cwd)
+    home = os.path.abspath(home)
+    cur = path
+    while True:
+        if cur == home or cur == os.path.dirname(cur):
+            break
+        if os.path.exists(os.path.join(cur, ".git")):
+            return os.path.basename(cur)
+        cur = os.path.dirname(cur)
+    return os.path.basename(path.rstrip("/")) or path
+
+
+def project_tag(session, name=None):
+    """Project name for the card, or '' when the card's title already is that name."""
+    tag = (name or project_name)(session.get("cwd_now") or session.get("cwd") or "")
+    return "" if not tag or tag == display_label(session) else tag
+
+
+def clean_env(env=None):
+    """A copy of the environment without macOS malloc debugging switches,
+    which make every child Python print a harmless warning into the log."""
+    env = dict(os.environ if env is None else env)
+    return {k: v for k, v in env.items() if not k.startswith("Malloc")}
 
 
 def read_tint(tint_dir, tty):
@@ -165,7 +428,9 @@ def is_light(h):
 # ---- colour scheme and light/dark mode, shared with tint.py ----
 
 CONFIG_PATH = os.path.join(TINT_DIR, "scheme.json")
-SCHEME_NAMES = ("muted", "jewel", "dusk", "ocean", "colourblind")
+SCHEME_NAMES = ("muted", "jewel", "dusk", "ocean", "colourblind",
+                "forest", "ember", "aurora", "desert", "berry",
+                "nordic", "autumn", "neon", "galaxy", "tropical")
 MODES = ("auto", "dark", "light")
 
 # Panel colours per mode: background, outline, text, secondary text.
@@ -226,25 +491,48 @@ def _hex(hue, sat, val):
     return "".join(f"{int(round(c * 255)):02x}" for c in colorsys.hsv_to_rgb(hue, sat, val))
 
 
+def _dark_of(h):
+    """Undo tint.py's light_of: the dark tab colour a light-mode tab colour came from,
+    so a scheme's character reads the same in both modes."""
+    import colorsys
+    hue, light, sat = colorsys.rgb_to_hls(*(int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)))
+    r, g, b = colorsys.hls_to_rgb(hue, min(1.0, max(0.0, (1 - light) / 0.55)), sat)
+    return "".join(f"{int(round(c * 255)):02x}" for c in (r, g, b))
+
+
+def _character(tint):
+    """(hue, saturation, value) of the dark version of a tab colour."""
+    return _hsv(_dark_of(tint) if is_light(tint) else tint)
+
+
 def card_fill(tint, panel_bg, mode="dark"):
-    """Card background for a tab tint, readable with the panel's text in this mode."""
-    hue, sat, _ = _hsv(tint)
+    """Card background for a tab tint, readable with the panel's text in this mode.
+    A richer tab colour gives a richer card, so schemes keep their character."""
     if mode == "light":
+        hue, sat, _ = _character(tint)
         if sat < 0.03:
             return _mix("e9e9ee", panel_bg, 0.3)
-        return _mix(_hex(hue, 0.16, 0.95), panel_bg, 0.2)
+        return _mix(_hex(hue, 0.05 + 0.28 * min(sat, 1.0), 0.96), panel_bg, 0.2)
     if is_light(tint):
         return _mix(brighten(tint), panel_bg, 0.78)
     return _mix(tint, panel_bg, 0.25)
 
 
 def accent(tint, mode="dark"):
-    """Outline and status colour for a card: vivid on dark, deeper on light."""
-    vivid = brighten(tint)
+    """Outline and status colour for a card. It keeps the tab colour's own
+    saturation and depth: quiet schemes get soft accents, bright ones vivid ones."""
+    hue, sat, val = _character(tint)
+    if sat < 0.03:
+        return "707070" if mode == "light" else brighten(tint)
+    s = min(1.0, max(0.2, 0.15 + 0.9 * sat))
     if mode == "light":
-        hue, sat, _ = _hsv(vivid)
-        return _hex(hue, max(sat, 0.6), 0.62) if sat >= 0.03 else "707070"
-    return vivid
+        v = min(0.68, max(0.42, 0.75 - 1.2 * (val - 0.1)))
+        out = _hex(hue, s, v)
+        while is_light(out) and v > 0.2:          # bright yellows need darkening to read
+            v -= 0.03
+            out = _hex(hue, s, v)
+        return out
+    return _hex(hue, s, min(1.0, max(0.62, 0.45 + 2.0 * val)))
 
 
 def _ps(pid, fields):
@@ -291,6 +579,26 @@ def acquire_single_instance(pid_file):
     return f
 
 
+PLUGIN_REGISTRY = os.path.join(HOME, ".claude", "plugins", "installed_plugins.json")
+
+
+def newer_install(registry=PLUGIN_REGISTRY, code_dir=CODE_DIR):
+    """The scripts folder of a different installed copy of this plugin, or None.
+    Only a copy running from the plugin cache restarts itself; a development
+    checkout is left alone."""
+    if os.sep + "cache" + os.sep not in code_dir:
+        return None
+    data = _read_json(registry) or {}
+    for key, entries in (data.get("plugins") or {}).items():
+        if not key.startswith("session-widget@") or not entries:
+            continue
+        path = os.path.join(entries[0].get("installPath") or "", "scripts")
+        if (os.path.isfile(os.path.join(path, "widget.py"))
+                and os.path.realpath(path) != os.path.realpath(code_dir)):
+            return path
+    return None
+
+
 def claude_pid_of(pid, ps=None):
     ps = ps or _ps
     for _ in range(12):
@@ -307,7 +615,9 @@ def claude_pid_of(pid, ps=None):
 
 
 def notify_mac(title, msg):
-    """Post a macOS banner. Fire and forget."""
+    """Post a macOS banner, unless banners are muted. Fire and forget."""
+    if banners_muted():
+        return
     q = lambda t: t.replace("\\", "\\\\").replace('"', '\\"')
     subprocess.Popen(["osascript", "-e",
                       f'display notification "{q(msg)}" with title "{q(title)}"'],
@@ -398,8 +708,8 @@ def armed_by_tool(name, inp):
     inp = inp or {}
     if name not in ARMING_TOOLS:
         return None
-    if name == "Bash" and not inp.get("run_in_background"):
-        return None
+    if name in ("Bash", "Agent") and not inp.get("run_in_background"):
+        return None                     # it finished before Claude stopped
     if name == "ScheduleWakeup" and inp.get("stop"):
         return None
     return ARMING_TOOLS[name]
@@ -543,6 +853,7 @@ def mirror_claude_sessions(claude_dir, sessions_dir, tint_dir=TINT_DIR,
                 "label": os.path.basename(cwd.rstrip("/")) or cwd or "?",
                 "task": rec.get("name") or "", "status": status, "source": "mirror",
                 "armed": armed, "transcript_mtime": mtime, "updated": time.time()}
+            data["status_since"] = data["updated"]
             write_session(sessions_dir, {k: v for k, v in data.items() if v is not None})
             continue
         was = ours.get("status")
