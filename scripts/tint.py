@@ -13,7 +13,8 @@ Manual use (the /tint command):
   tint.py list         show the current colours and which tab has what
   tint.py all          tint every tab that has a running claude
   tint.py scheme NAME  switch scheme: muted, jewel, dusk, ocean, colourblind, forest,
-                       ember, aurora, desert, berry, nordic, autumn, neon, galaxy, tropical
+                       ember, aurora, desert, berry, nordic, autumn, neon, galaxy, tropical,
+                       dracula, crewtractor
   tint.py mode MODE    switch mode: auto (follow macOS), dark, light
 Only acts inside Apple Terminal.
 """
@@ -103,6 +104,17 @@ DARK = {
         ("hibiscus", "4d0926"), ("pineapple", "003a0f"), ("flamingo", "47070c"), ("palm", "174d2e"), ("coral", "381a01"),
         ("reef", "023832"), ("papaya", "413413"), ("lagoon", "14494f"), ("mango", "40410a"), ("cove", "062a3a"),
     ],
+    # The Dracula palette (as in the JetBrains Dracula theme), darkened for tab backgrounds.
+    "dracula": [
+        ("dracula", "21222c"), ("foreground", "292929"), ("comment", "23315c"), ("cyan", "054957"), ("green", "044915"),
+        ("orange", "522d04"), ("pink", "61053a"), ("purple", "300868"), ("red", "550707"), ("yellow", "404508"),
+    ],
+    # The crew tractor meme: farm colours named after what gets yelled at the pond.
+    "crewtractor": [
+        ("state?!", "122154"), ("this?!", "552a02"), ("this ain't no", "30251d"), ("state property", "0f3d17"),
+        ("private property", "500707"), ("lock em up", "2e1452"), ("crewe tractor", "2a3c07"), ("the pond", "0b3d3d"),
+        ("hay bale", "473a06"), ("pickup truck", "49122f"),
+    ],
 }
 PALETTE_SIZE = 10                                # every scheme has this many colours
 SCHEMES = DARK
@@ -123,6 +135,11 @@ def palette(scheme, mode):
     """(name, hex) backgrounds for a scheme in 'dark' or 'light' mode."""
     pal = DARK[scheme]
     return pal if mode == "dark" else [(n, light_of(h)) for n, h in pal]
+
+
+def colour_key(name):
+    """A colour name reduced to lowercase letters and digits, for matching typed names."""
+    return "".join(ch for ch in name.lower() if ch.isalnum())
 
 
 NAMES = {h: n for s in DARK for m in ("dark", "light") for n, h in palette(s, m)}
@@ -368,14 +385,16 @@ def main(argv):
     if action == "shuffle":
         print(apply(tty, tabs, pick_free(tty, tabs, avoid=tabs[tty], shuffle=True)))
     elif action == "set":
-        name = argv[1] if len(argv) > 1 else ""
+        # Names can hold spaces and punctuation ("state?!"), which the shell mangles,
+        # so match on letters and digits only: "set state property" or "set stateproperty".
+        name = colour_key(" ".join(argv[1:]))
         pal = current_palette()
         mode = w.effective_mode()
-        hexes = dict(pal)
+        hexes = {colour_key(n): h for n, h in pal}
         for scheme in DARK:
             for n, h in palette(scheme, mode):
-                hexes.setdefault(n, h)
-        if name not in hexes:
+                hexes.setdefault(colour_key(n), h)
+        if not name or name not in hexes:
             print("unknown colour; choices: " + ", ".join(n for n, _ in pal))
             return
         print(apply(tty, tabs, hexes[name]))

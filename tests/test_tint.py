@@ -147,3 +147,21 @@ def test_claude_ttys_includes_the_calling_session(monkeypatch):
     monkeypatch.setattr(tint, "tty_of_pid", lambda p: "/dev/ttys000")
     assert tint.claude_ttys() == {"/dev/ttys000"}
     assert "-a" in calls[0]          # without it, the session running /tint is skipped
+
+
+def test_colour_names_match_without_spaces_or_punctuation():
+    assert tint.colour_key("State?!") == "state"
+    assert tint.colour_key("this ain't no") == "thisaintno"
+    keys = [tint.colour_key(n) for s in ("dracula", "crewtractor") for n, _ in tint.DARK[s]]
+    assert len(set(keys[:10])) == 10 and len(set(keys[10:])) == 10
+
+
+def test_set_finds_a_punctuated_colour(tmp_path, monkeypatch):
+    tabs = {"/dev/ttys001": "000000"}
+    painted = _fake_terminal(tmp_path, monkeypatch, tabs, {"/dev/ttys001"})
+    monkeypatch.setattr(tint, "tty_of_pid", lambda pid: "/dev/ttys001")
+    w.save_config(mode="dark", scheme="crewtractor")
+    tint.main(["set", "state", "property"])
+    assert painted["/dev/ttys001"][0] == "0f3d17"
+    tint.main(["set", "State?!"])
+    assert painted["/dev/ttys001"][0] == "122154"

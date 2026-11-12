@@ -4,7 +4,7 @@
 
 If you run several Claude Code sessions in different Terminal tabs, it is easy to lose track of the one quietly waiting for an answer. This panel sits in the corner of your screen, lists each session with a short summary of what it is doing, and pulses the ones that are waiting on you. Click a card to jump straight to that tab.
 
-Each Claude tab also gets its own background colour, and its card in the panel matches. Pick from fifteen colour schemes, each in a light and a dark version.
+Each Claude tab also gets its own background colour, and its card in the panel matches. Pick from seventeen colour schemes, each in a light and a dark version.
 
 <p align="center">
   <img src="docs/panel.png" alt="The widget panel listing five Claude Code sessions, each with a one-line summary, its project name and a status pill with a timer. Two are outlined and pulsing: one waiting for permission and one waiting for input. The others are watching a background job, working with two subagents, and idle." width="380">
@@ -114,10 +114,10 @@ Only one panel ever runs, however many sessions you open.
 
 Every Terminal tab running Claude Code gets its own background colour when the session starts. No two open tabs share a colour, and each card in the panel matches its tab. When the session ends, the tab goes back to its original colours.
 
-There are fifteen colour schemes, and each comes in a dark and a light version. Light mode also turns the tab's text dark and gives the panel a light background, so it works whatever your Terminal profile looks like.
+There are seventeen colour schemes, and each comes in a dark and a light version. Light mode also turns the tab's text dark and gives the panel a light background, so it works whatever your Terminal profile looks like.
 
 <p align="center">
-  <img src="docs/schemes.png" alt="A sheet of all fifteen colour schemes. Each scheme is a row of ten sample cards, shown twice: once on the dark panel and once on the light panel." width="100%">
+  <img src="docs/schemes.png" alt="A sheet of all seventeen colour schemes. Each scheme is a row of ten sample cards, shown twice: once on the dark panel and once on the light panel." width="100%">
 </p>
 <p align="center"><sub>Each scheme in its dark version, then its light version, with colours in rainbow order so schemes are easy to compare.</sub></p>
 
@@ -140,6 +140,8 @@ There are fifteen colour schemes, and each comes in a dark and a light version. 
 | **autumn** | 10 | Only autumn leaves: maroon, rust, pumpkin, ochre and olive. |
 | **ember** | 10 | Only fire colours: reds, oranges and golds. |
 | **tropical** | 10 | Only tropical colours: pinks, corals, mangos and lagoon blues. |
+| **dracula** | 10 | The Dracula palette from the JetBrains Dracula theme, darkened for tab backgrounds. |
+| **crewtractor** | 10 | Farm colours named after the crew tractor meme, such as "state property" and "this ain't no". |
 
 **Every scheme has ten colours**, so ten tabs can be open before any colour repeats.
 
@@ -174,7 +176,7 @@ Both commands save your choice and recolour every open Claude tab straight away.
 | Command | What it does |
 | --- | --- |
 | `/session-widget:tint` | Give this tab a different random colour. |
-| `/session-widget:tint set <colour>` | Give this tab a named colour, such as `set sapphire`. |
+| `/session-widget:tint set <colour>` | Give this tab a named colour, such as `set sapphire`. Spaces and punctuation are optional, so `set state property` and `set stateproperty` both work. |
 | `/session-widget:tint list` | Show the current colours and which tab has each. |
 | `/session-widget:tint reset` | Put this tab back to its original colours. |
 | `/session-widget:tint all` | Colour every Claude tab that is not coloured yet. |
