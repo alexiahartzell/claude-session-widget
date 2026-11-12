@@ -897,16 +897,16 @@ def mirror_claude_sessions(claude_dir, sessions_dir, tint_dir=TINT_DIR,
 
 
 # ---- the pet: a small creature on each card that acts out the status ----
-# Three to choose from, like picking a starter: a water drop, a fire kit and a
-# leaf sprout. Each is a list of shapes on a 24 x 24 grid, so the widget (Tk)
+# Three to choose from, like picking a starter: a stone pebble, a fire kit and
+# a leaf sprout. Each is a list of shapes on a 24 x 24 grid, so the widget (Tk)
 # and the preview (Pillow) draw exactly the same thing. Roles pick the colour:
 # body takes the card's accent, the rest are fixed or derived from it.
 
-PETS = ("drop", "kit", "sprout")
+PETS = ("pebble", "kit", "sprout")
 PET_GRID = 24
 PET_MARK = {"idle": "z", "needs_input": "!", "permission": "?"}
 PET_COLOURS = {"dark": "24242e", "white": "ffffff", "flame": "ff9a3c", "leaf": "5cc75a",
-               "beak": "ffb347", "water": "bfe8ff"}
+               "beak": "ffb347", "sparkle": "fff4c2"}
 
 
 def _eyes(out, cx, cy, gap, r, status, look):
@@ -931,17 +931,21 @@ def pet_shapes(kind, status, frame):
         for k, ln in enumerate((2.2, 1.4, 2.2) if f else (1.4, 2.2, 1.4)):
             y = 11 + 3 * k
             out.append(("line", (0.3, y, 0.3 + ln, y), "light", 0.9))
-    if kind == "drop":
-        top, bot = 2.6 + lift + squash, 22.4 + lift
-        out.append(("poly", (12, top, 18.5, top + 9.5, 5.5, top + 9.5), "body"))
-        out.append(("oval", (3.5, top + 6.5, 20.5, bot), "body"))
-        out.append(("oval", (6.3, top + 8, 9.3, top + 11.5), "water"))
-        cy = top + 13
-        _eyes(out, 12, cy, 3.6, 1.5, status, look)
-        out.append(("oval", (5.4, cy + 2.6, 8.2, cy + 4), "blush"))
-        out.append(("oval", (15.8, cy + 2.6, 18.6, cy + 4), "blush"))
+    if kind == "pebble":
+        top, bot = 6.5 + lift + squash, 21.5 + lift
+        out.append(("oval", (2.5, top, 21.5, bot), "body"))
+        out.append(("oval", (4.5, top + 0.8, 12, top + 4.2), "light"))           # smooth top
+        for sx, sy, sr in ((16.5, 2.4, 0.9), (18.6, 5.2, 0.6), (5.2, 9.6, 0.7)):  # speckles
+            out.append(("oval", (sx - sr, top + sy - sr, sx + sr, top + sy + sr), "shade"))
+        sp = 1.1 if f else 0.7                                                 # a mineral glint
+        gx, gy = 3.4, top - 1.2                       # top left, clear of the ! and z marks
+        out.append(("poly", (gx, gy - sp, gx + sp, gy, gx, gy + sp, gx - sp, gy), "sparkle"))
+        cy = top + 7.6
+        _eyes(out, 12, cy, 3.8, 1.5, status, look)
+        out.append(("oval", (5.2, cy + 2.4, 8, cy + 3.8), "blush"))
+        out.append(("oval", (16, cy + 2.4, 18.8, cy + 3.8), "blush"))
         if status != "idle":
-            out.append(("arc", (10.7, cy + 1.6, 13.3, cy + 4), "dark", 200, 140, 0.9))
+            out.append(("arc", (10.7, cy + 1.4, 13.3, cy + 3.8), "dark", 200, 140, 0.9))
     elif kind == "kit":
         cy = 14 + lift
         h = 6.6 - squash
@@ -989,9 +993,9 @@ def pet_colours(accent_hex, card_hex):
 
 def pet_kind(path=None):
     """The chosen pet, or None when pets are off."""
-    v = _config(path).get("pet", "drop")
-    if v is True:
-        return "drop"
+    v = _config(path).get("pet", "pebble")
+    if v is True or v == "drop":                 # older settings
+        return "pebble"
     return v if v in PETS else None
 
 

@@ -159,7 +159,7 @@ class Widget:
         self.tip = None
         self.tip_card = None
         self.tip_job = None
-        self.pet = w.pet_kind()     # "drop", "kit", "sprout", or None when off
+        self.pet = w.pet_kind()     # "pebble", "kit", "sprout", or None when off
         self.pet_spots = []         # (session id, x, y, status, colours, mark ink, card tag)
         self.pet_frame = 0
         self.work_s, self.work_longest = {}, {}

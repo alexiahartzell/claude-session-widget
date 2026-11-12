@@ -461,8 +461,8 @@ def test_cmd_pet_choose_list_and_off(tmp_path, monkeypatch):
     cfg = str(tmp_path / "config.json")
     monkeypatch.setattr(w, "WIDGET_CONFIG", cfg)
     c = lambda *a: ss.cmd(["pet", *a], sessions_dir=str(tmp_path), widget_dir=str(tmp_path), tty=None)
-    assert "drop" in c() and "kit" in c() and "sprout" in c()
+    assert "pebble" in c() and "kit" in c() and "sprout" in c()
     assert c("kit") == "widget: your pet is now kit, a fire kit" and w.pet_kind(cfg) == "kit"
     assert c("off") == "widget: pets off" and w.pet_kind(cfg) is None
     c("on")
-    assert w.pet_kind(cfg) == "drop"
+    assert w.pet_kind(cfg) == "pebble"
