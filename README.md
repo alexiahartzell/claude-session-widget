@@ -55,7 +55,7 @@ Sessions that need you always sort to the top.
 
 **Updates take effect on their own.** After `claude plugin update`, the panel notices the new version within half a minute and restarts onto it.
 
-**Statuses stay right even when a hook is missed.** Claude Code animates a symbol at the start of the Terminal tab title while it works, and shows ✳ while it waits. The panel reads the tab titles every second or two and corrects a card that disagrees, for example after you press Escape. It never hides a permission prompt.
+**Statuses stay right even when a hook is missed.** Claude Code animates a symbol at the start of the Terminal tab title while it works, and shows a star while it waits. The panel reads the tab titles every second or two and corrects a card that disagrees, for example after you press Escape. It never hides a permission prompt.
 
 ---
 
@@ -117,7 +117,7 @@ Every Terminal tab running Claude Code gets its own background colour when the s
 There are fifteen colour schemes, and each comes in a dark and a light version. Light mode also turns the tab's text dark and gives the panel a light background, so it works whatever your Terminal profile looks like.
 
 <p align="center">
-  <img src="docs/schemes.png" alt="A sheet of all fifteen colour schemes. Each scheme is a row of ten sample cards, shown twice: once on the dark panel and once on the light panel. The five original schemes come first, then the ten newer ones." width="100%">
+  <img src="docs/schemes.png" alt="A sheet of all fifteen colour schemes. Each scheme is a row of ten sample cards, shown twice: once on the dark panel and once on the light panel." width="100%">
 </p>
 <p align="center"><sub>Each scheme in its dark version, then its light version, with colours in rainbow order so schemes are easy to compare.</sub></p>
 
@@ -127,18 +127,18 @@ There are fifteen colour schemes, and each comes in a dark and a light version. 
 | --- | --- | --- |
 | **muted** | 10 | Soft, greyish colours from every part of the rainbow. The default. |
 | **jewel** | 10 | Deep, rich colours from every part of the rainbow. |
-| **dusk** | 10 | Only purples, lilacs, mauves and dusty roses. |
-| **ocean** | 10 | Only sea greens, teals and blues, from shallows to the deep. |
 | **colourblind** | 10 | Colours picked to stay distinct for protanopia, deuteranopia and tritanopia. |
-| **forest** | 10 | Only greens and woody browns. |
-| **ember** | 10 | Only fire colours: reds, oranges and golds. |
-| **aurora** | 10 | Only northern-lights colours: greens, teals, blues and violets. |
-| **desert** | 10 | Only soft earth colours: sand, clay, terracotta and sage. |
+| **dusk** | 10 | Only purples, lilacs, mauves and dusty roses. |
 | **berry** | 10 | Only berry colours: blues, purples, magentas and reds. |
-| **nordic** | 10 | Only cool greys with a hint of blue or green. |
-| **autumn** | 10 | Only autumn leaves: maroon, rust, pumpkin, ochre and olive. |
-| **neon** | 10 | Only bright synthwave colours: cyans, blues, violets and pinks. |
 | **galaxy** | 10 | Only deep night-sky blues and violets. |
+| **neon** | 10 | Only bright synthwave colours: cyans, blues, violets and pinks. |
+| **nordic** | 10 | Only cool greys with a hint of blue or green. |
+| **ocean** | 10 | Only sea greens, teals and blues, from shallows to the deep. |
+| **aurora** | 10 | Only northern-lights colours: greens, teals, blues and violets. |
+| **forest** | 10 | Only greens and woody browns. |
+| **desert** | 10 | Only soft earth colours: sand, clay, terracotta and sage. |
+| **autumn** | 10 | Only autumn leaves: maroon, rust, pumpkin, ochre and olive. |
+| **ember** | 10 | Only fire colours: reds, oranges and golds. |
 | **tropical** | 10 | Only tropical colours: pinks, corals, mangos and lagoon blues. |
 
 **Every scheme has ten colours**, so ten tabs can be open before any colour repeats.
@@ -217,15 +217,15 @@ Run these inside any Claude Code session:
 There are four small Python programs and no background service.
 
 ```text
- Claude Code session ──hook events──▶ tint.py ──colours──▶ the Terminal tab
-                     ──hook events──▶ session-state.py ──writes──▶ ~/.claude/widget/sessions/<id>.json
-                                            │                                    │
-                                after a reply ▼                                  │
-                                      summarise.py ──summary──▶ (same file)      │
-                                                                                 │
-     macOS banner ◀── widget.py (the panel) ◀──reads twice a second ─────────────┘
-                          │
-                          └──reads every tab title──▶ Terminal
+ Claude Code session --hook events--> tint.py --colours--> the Terminal tab
+                     --hook events--> session-state.py --writes--> ~/.claude/widget/sessions/<id>.json
+                                            |                                    |
+                                after a reply v                                  |
+                                      summarise.py --summary--> (same file)      |
+                                                                                 |
+     macOS banner <-- widget.py (the panel) <--reads twice a second -------------+
+                          |
+                          +--reads every tab title--> Terminal
 ```
 
 1. **When a session starts, `tint.py` colours its Terminal tab**, and puts the original colours back when it ends.
@@ -234,7 +234,7 @@ There are four small Python programs and no background service.
 4. **`widget.py` reads those files twice a second** and redraws the panel when anything changes.
 5. **When a session starts needing you**, the panel posts a macOS banner and reappears if it was hidden.
 6. **After each reply, `summarise.py` writes the card's summary** in the background. It sends your last few prompts to Haiku through your own `claude` command, with hooks turned off so it never triggers itself.
-7. **Every second or two, the panel reads each Terminal tab's title.** Claude Code shows a spinner there while it works and ✳ while it waits, so the panel can correct a card whose hook was missed.
+7. **Every second or two, the panel reads each Terminal tab's title.** Claude Code shows a spinner there while it works and a star while it waits, so the panel can correct a card whose hook was missed.
 
 A few details:
 
@@ -305,13 +305,13 @@ cat ~/.claude/widget/hooks.log    # the hook script
 **Clicking a card does nothing.**
 
 - Click-to-jump only works in Apple's Terminal app.
-- Allow Python to control Terminal under **System Settings → Privacy & Security → Automation**.
+- Allow Python to control Terminal under **System Settings > Privacy & Security > Automation**.
 
 **Tabs are not coloured.**
 
 - Colours only apply in Apple's Terminal app.
 - Check that `CLAUDE_WIDGET_TINT` is not set to `off`.
-- Allow Python to control Terminal under **System Settings → Privacy & Security → Automation**.
+- Allow Python to control Terminal under **System Settings > Privacy & Security > Automation**.
 
 **The commands print nothing, or say AppleScript is blocked.**
 
@@ -326,7 +326,7 @@ python3 ~/.claude/plugins/cache/session-widget/session-widget/*/scripts/tint.py 
 
 **No banners appear.**
 
-- The banners come from AppleScript, so macOS usually lists them under **Script Editor**. Allow them in **System Settings → Notifications → Script Editor**.
+- The banners come from AppleScript, so macOS usually lists them under **Script Editor**. Allow them in **System Settings > Notifications > Script Editor**.
 - Focus modes and Do Not Disturb hide them too.
 
 **A card says "working" while Claude is waiting.**

@@ -136,3 +136,14 @@ def test_every_scheme_keeps_every_card_distinct_in_both_modes():
 
 def test_every_scheme_is_selectable():
     assert set(tint.DARK) == set(w.SCHEME_NAMES)
+
+
+def test_claude_ttys_includes_the_calling_session(monkeypatch):
+    calls = []
+    def fake(cmd, text=True):
+        calls.append(cmd)
+        return "101\n"
+    monkeypatch.setattr(tint.subprocess, "check_output", fake)
+    monkeypatch.setattr(tint, "tty_of_pid", lambda p: "/dev/ttys000")
+    assert tint.claude_ttys() == {"/dev/ttys000"}
+    assert "-a" in calls[0]          # without it, the session running /tint is skipped
