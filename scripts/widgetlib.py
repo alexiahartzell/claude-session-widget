@@ -554,6 +554,26 @@ def acquire_single_instance(pid_file):
     return f
 
 
+PLUGIN_REGISTRY = os.path.join(HOME, ".claude", "plugins", "installed_plugins.json")
+
+
+def newer_install(registry=PLUGIN_REGISTRY, code_dir=CODE_DIR):
+    """The scripts folder of a different installed copy of this plugin, or None.
+    Only a copy running from the plugin cache restarts itself; a development
+    checkout is left alone."""
+    if os.sep + "cache" + os.sep not in code_dir:
+        return None
+    data = _read_json(registry) or {}
+    for key, entries in (data.get("plugins") or {}).items():
+        if not key.startswith("session-widget@") or not entries:
+            continue
+        path = os.path.join(entries[0].get("installPath") or "", "scripts")
+        if (os.path.isfile(os.path.join(path, "widget.py"))
+                and os.path.realpath(path) != os.path.realpath(code_dir)):
+            return path
+    return None
+
+
 def claude_pid_of(pid, ps=None):
     ps = ps or _ps
     for _ in range(12):

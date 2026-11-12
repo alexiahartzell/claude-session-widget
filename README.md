@@ -53,6 +53,8 @@ Sessions that need you always sort to the top.
 
 **Mute banners for a while.** Click "mute banners" at the top of the panel to silence macOS banners for an hour, and click again to turn them back on. Cards still pulse. For another length, run `/widget mute 20`, or `/widget unmute`.
 
+**Updates take effect on their own.** After `claude plugin update`, the panel notices the new version within half a minute and restarts onto it.
+
 **Statuses stay right even when a hook is missed.** Claude Code animates a symbol at the start of the Terminal tab title while it works, and shows ✳ while it waits. The panel reads the tab titles every second or two and corrects a card that disagrees, for example after you press Escape. It never hides a permission prompt.
 
 ---

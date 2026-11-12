@@ -728,3 +728,33 @@ def test_notify_mac_stays_quiet_while_muted(monkeypatch, tmp_path):
     w.mute_banners(0, path=cfg)
     w.notify_mac("t", "m")
     assert len(calls) == 1
+
+
+# ---- restarting onto a newer install ----
+
+def _install(tmp_path, version):
+    scripts = tmp_path / "cache" / "session-widget" / version / "scripts"
+    scripts.mkdir(parents=True)
+    (scripts / "widget.py").write_text("")
+    return scripts
+
+
+def test_newer_install_found(tmp_path):
+    old, new = _install(tmp_path, "1.9.0"), _install(tmp_path, "2.0.0")
+    reg = tmp_path / "installed_plugins.json"
+    reg.write_text(json.dumps({"plugins": {"session-widget@session-widget": [
+        {"installPath": str(new.parent), "version": "2.0.0"}]}}))
+    assert w.newer_install(str(reg), str(old)) == str(new)
+    assert w.newer_install(str(reg), str(new)) is None           # already on it
+
+
+def test_newer_install_ignores_dev_checkouts_and_bad_files(tmp_path):
+    new = _install(tmp_path, "2.0.0")
+    reg = tmp_path / "installed_plugins.json"
+    reg.write_text(json.dumps({"plugins": {"session-widget@session-widget": [{"installPath": str(new.parent)}]}}))
+    assert w.newer_install(str(reg), "/Users/x/work/claude-session-widget/scripts") is None
+    reg.write_text("{broken")
+    assert w.newer_install(str(reg), str(tmp_path / "cache" / "x" / "scripts")) is None
+    missing = tmp_path / "gone"
+    reg.write_text(json.dumps({"plugins": {"session-widget@session-widget": [{"installPath": str(missing)}]}}))
+    assert w.newer_install(str(reg), str(new)) is None

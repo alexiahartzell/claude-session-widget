@@ -31,6 +31,7 @@ CARD_GAP = 8
 RADIUS = 16
 PILL_H = 20           # status pill height
 PILL_PAD = 9          # space either side of the status word inside its pill
+UPDATE_CHECK_MS = 30000   # how often to look for a newer installed version
 HOVER_MS = 450        # pause before the full-title tooltip appears
 MUTE_MIN = 60         # how long a click on the bell mutes banners
 STATUS_WORD = {"working": "working", "needs_input": "needs you", "permission": "permission",
@@ -162,6 +163,7 @@ class Widget:
         self.root.protocol("WM_DELETE_WINDOW", self.hide)
         self.root.after(100, self.tick)
         self.root.after(PULSE_MS, self.pulse)
+        self.root.after(UPDATE_CHECK_MS, self.check_update)
 
     # ---- window position ----
     def restore_pos(self):
@@ -292,6 +294,23 @@ class Widget:
             pass
         self.alive = False
         self.root.destroy()
+
+    def check_update(self):
+        """After a plugin update, hand over to the new copy without anyone restarting it."""
+        if not self.alive:
+            return
+        try:
+            new = w.newer_install()
+            if new:
+                log(f"newer install at {new}; restarting onto it")
+                self.quit()                 # releases the single-instance lock first
+                out = open(os.path.join(w.WIDGET_DIR, "widget.log"), "a")
+                subprocess.Popen([sys.executable, os.path.join(new, "widget.py")], stdout=out, stderr=out,
+                                 stdin=subprocess.DEVNULL, start_new_session=True, env=w.clean_env())
+                return
+        except Exception as e:
+            log(f"update check: {e!r}")
+        self.root.after(UPDATE_CHECK_MS, self.check_update)
 
     def show(self):
         self.hidden = False
