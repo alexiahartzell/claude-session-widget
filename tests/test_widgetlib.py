@@ -771,3 +771,53 @@ def test_waiting_from_stop_labels():
     assert w.waiting_from_stop({"background_tasks": [t("shell"), t("subagent")]}) == (True, "2 background tasks")
     assert w.waiting_from_stop({"background_tasks": [t("dream")]}) == (True, "background work")
     assert w.waiting_from_stop({"background_tasks": [], "session_crons": [{"id": "c"}]}) == (True, "a timer")
+
+
+# ---- hover finds the card by mouse position (macOS gives no "current" item) ----
+
+class _FakeCanvas:
+    """Items: id -> (bbox, tags). Mimics find_overlapping and gettags."""
+    def __init__(self, items):
+        self.items = items
+
+    def find_overlapping(self, x1, y1, x2, y2):
+        return tuple(i for i, ((a, b, c, d), _) in self.items.items() if a <= x1 <= c and b <= y1 <= d)
+
+    def gettags(self, item):
+        return self.items[item][1]
+
+
+def _hover_widget(items):
+    import types, widget
+    fake = types.SimpleNamespace(c=_FakeCanvas(items), tip_card=None, shown=[])
+    fake.card_at = types.MethodType(widget.Widget.card_at, fake)
+    return fake, widget
+
+
+def test_card_at_finds_the_card_under_the_point():
+    fake, _ = _hover_widget({1: ((0, 0, 380, 30), ("header",)),
+                             2: ((10, 40, 370, 100), ("card:a",)),
+                             3: ((300, 50, 360, 70), ("card:a",)),
+                             4: ((10, 108, 370, 170), ("card:b",))})
+    assert fake.card_at(50, 60) == "a"
+    assert fake.card_at(320, 60) == "a"          # over the pill, still card a
+    assert fake.card_at(50, 120) == "b"
+    assert fake.card_at(50, 104) is None         # the gap between cards
+    assert fake.card_at(50, 10) is None          # the header
+
+
+def test_hover_card_schedules_the_tip_once_per_card():
+    import types
+    fake, widget = _hover_widget({})
+    calls = []
+    fake.tip_job = None
+    fake.tip = None
+    fake.root = types.SimpleNamespace(after=lambda ms, fn: calls.append(ms) or "job",
+                                      after_cancel=lambda job: calls.append("cancel"))
+    fake.hide_tip = types.MethodType(widget.Widget.hide_tip, fake)
+    hover = types.MethodType(widget.Widget.hover_card, fake)
+    hover("a")
+    hover("a")                                   # still on the same card: no new timer
+    assert calls == [widget.HOVER_MS] and fake.tip_card == "a"
+    hover(None)                                  # moved off: timer cancelled
+    assert calls[-1] == "cancel" and fake.tip_card is None
