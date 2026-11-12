@@ -159,10 +159,10 @@ def reconcile(session, state, held_s):
     if state == "idle" and held_s >= IDLE_HOLD_S and status == "working":
         return {"status": "watching"} if session.get("armed") else {"status": "needs_input"}
     if state == "busy" and held_s >= BUSY_HOLD_S:
-        if status in ("idle", "needs_input"):
+        if status in ("idle", "needs_input", "watching"):
+            # Keep "armed": a busy tab while watching can be a blocked Stop resuming the
+            # turn, not the job ending. Only a new prompt clears it.
             return {"status": "working"}
-        if status == "watching":
-            return {"status": "working", "armed": None}
     return None
 
 

@@ -241,14 +241,32 @@ def test_stop_while_armed_is_watching_not_needs_input(tmp_path):
     assert calls == []
 
 
-def test_tool_use_after_watching_means_claude_resumed(tmp_path):
+def test_tool_use_after_watching_keeps_armed_until_a_new_prompt(tmp_path):
+    # A Stop hook elsewhere blocks the stop, Claude resumes and runs a tool (issue 3).
+    _armed_session(tmp_path)
+    run(tmp_path, {"hook_event_name": "PostToolUse", "session_id": "s1", "tool_name": "Bash",
+                   "tool_input": {"command": "python3 calc.py", "run_in_background": True}})
+    run(tmp_path, {"hook_event_name": "Stop", "session_id": "s1"})
+    new, _ = run(tmp_path, {"hook_event_name": "PreToolUse", "session_id": "s1", "tool_name": "Read", "tool_input": {}})
+    assert new["status"] == "working" and new["armed"] == "a background job"
+    new, calls = run(tmp_path, {"hook_event_name": "Stop", "session_id": "s1"})
+    assert new["status"] == "watching" and calls == []
+    new, _ = run(tmp_path, {"hook_event_name": "UserPromptSubmit", "session_id": "s1",
+                            "prompt": "<task-notification>done</task-notification>"})
+    assert "armed" not in new
+    new, calls = run(tmp_path, {"hook_event_name": "Stop", "session_id": "s1"})
+    assert new["status"] == "needs_input" and len(calls) == 1
+
+
+def test_blocked_stop_without_tools_stays_watching(tmp_path):
     _armed_session(tmp_path)
     run(tmp_path, {"hook_event_name": "PostToolUse", "session_id": "s1", "tool_name": "Monitor", "tool_input": {}})
     run(tmp_path, {"hook_event_name": "Stop", "session_id": "s1"})
-    new, _ = run(tmp_path, {"hook_event_name": "PreToolUse", "session_id": "s1", "tool_name": "Read", "tool_input": {}})
-    assert new["status"] == "working" and "armed" not in new
+    d = str(tmp_path / "sessions")
+    fix = w.reconcile(w.load_session(d, "s1"), "busy", held_s=3)   # tab spinner turns busy
+    w.update_session(d, "s1", **fix)
     new, calls = run(tmp_path, {"hook_event_name": "Stop", "session_id": "s1"})
-    assert new["status"] == "needs_input" and len(calls) == 1
+    assert new["status"] == "watching" and new["armed"] == "a watcher" and calls == []
 
 
 def test_pre_tool_use_while_working_records_activity(tmp_path):
