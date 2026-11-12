@@ -113,19 +113,15 @@ def display_label(session):
 
 
 def subtitle(session):
-    """Second line of a row: what Claude is doing right now, what it waits on,
-    the last step it took, the chat's title, your last prompt, or the tab colour."""
-    task = (session.get("task") or "").strip()
+    """Second line of a card: what is happening right now. The step Claude is
+    on while it works, what it waits on while watching, and nothing when it is
+    your turn or idle. The title above says what the session is about."""
     status = session.get("status")
     if status == "watching" and session.get("armed"):
-        return f"waiting on {session['armed']}" + (f" · {task}" if task else "")
-    activity = session.get("activity")
-    if activity:
-        return activity if status in ("working", "permission") else f"last: {activity}"
-    chat = session.get("title") or session.get("tab_title")
-    if chat and chat != display_label(session):
-        return chat
-    return task or f"{session.get('color_name') or 'grey' } tab"
+        return f"waiting on {session['armed']}"
+    if status in ("working", "permission"):
+        return session.get("activity") or (session.get("task") or "").strip()
+    return ""
 
 
 # ---- Claude's own spinner, read from the Terminal tab title ----

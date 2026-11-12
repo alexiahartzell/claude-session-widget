@@ -403,19 +403,21 @@ class Widget:
         return h
 
     def draw_subtitle(self, s, x, y, width, vivid, th, tag):
-        """Project name in the card's accent colour, then the activity or task."""
+        """Project name in the card's accent colour, then what is happening now."""
         c = self.c
         project = w.project_tag(s)
+        now = w.subtitle(s)
         if project:
-            project = self.fit(project, self.f_tag, width * 0.45)
+            project = self.fit(project, self.f_tag, width * 0.45 if now else width)
             c.create_text(x, y, text=project, anchor="w", fill=vivid, font=self.f_tag, tags=(tag,))
-            x += self.f_tag.measure(project) + 4
-            width -= self.f_tag.measure(project) + 4
-            c.create_text(x, y, text="·", anchor="w", fill=th["dim"], font=self.f_sub, tags=(tag,))
-            x += self.f_sub.measure("· ")
-            width -= self.f_sub.measure("· ")
-        sub = self.fit(w.subtitle(s), self.f_sub, max(width, 0))
-        c.create_text(x, y, text=sub, anchor="w", fill=th["dim"], font=self.f_sub, tags=(tag,))
+            if not now:
+                return
+            used = self.f_tag.measure(project) + 4
+            c.create_text(x + used, y, text="·", anchor="w", fill=th["dim"], font=self.f_sub, tags=(tag,))
+            used += self.f_sub.measure("· ")
+            x, width = x + used, width - used
+        c.create_text(x, y, text=self.fit(now, self.f_sub, max(width, 0)), anchor="w",
+                      fill=th["dim"], font=self.f_sub, tags=(tag,))
 
     def pill(self, x1, y1, x2, y2, fill, tag):
         """A crisp capsule: two circles joined by a rectangle. A smoothed polygon

@@ -255,9 +255,8 @@ def test_mirror_uses_claude_name_as_task(tmp_path):
 
 
 def test_subtitle_falls_back_to_colour_name():
-    assert w.subtitle({"task": "fix plot", "color_name": "plum"}) == "fix plot"
-    assert w.subtitle({"task": "", "color_name": "plum"}) == "plum tab"
-    assert w.subtitle({}) == "grey tab"
+    assert w.subtitle({"task": "fix plot", "color_name": "plum"}) == ""     # idle: nothing happening now
+    assert w.subtitle({}) == ""
 
 
 # ---- review fixes ----
@@ -324,7 +323,7 @@ def test_single_instance_lock(tmp_path):
 
 
 def test_subtitle_while_watching_names_what_it_waits_on():
-    assert w.subtitle({"status": "watching", "armed": "a watcher", "task": "run the calc"}) == "waiting on a watcher · run the calc"
+    assert w.subtitle({"status": "watching", "armed": "a watcher", "task": "run the calc"}) == "waiting on a watcher"
     assert w.subtitle({"status": "watching", "armed": "a subagent", "task": ""}) == "waiting on a subagent"
 
 
@@ -598,7 +597,7 @@ def test_subtitle_shows_live_activity_while_working_or_asking():
     s["status"] = "permission"
     assert w.subtitle(s) == "Editing plot.py"
     s["status"] = "needs_input"
-    assert w.subtitle(s) == "last: Editing plot.py"
+    assert w.subtitle(s) == ""                   # your turn: the pill says so, no stale step
     assert w.subtitle({"status": "working", "task": "fix the plot"}) == "fix the plot"
 
 
@@ -672,11 +671,11 @@ def test_summary_becomes_the_headline():
     assert w.display_label(dict(s, label_override="paper")) == "paper"
 
 
-def test_subtitle_names_the_chat_when_the_summary_is_the_headline():
+def test_subtitle_is_empty_when_it_is_your_turn():
     s = {"status": "needs_input", "title": "Lib-drop PDF import", "summary": "Fixing stuck widget statuses",
          "task": "last prompt"}
-    assert w.subtitle(s) == "Lib-drop PDF import"
-    assert w.subtitle({"status": "needs_input", "title": "Lib-drop PDF import", "task": "last prompt"}) == "last prompt"
+    assert w.subtitle(s) == ""
+    assert w.subtitle({"status": "needs_input", "title": "Lib-drop PDF import", "task": "last prompt"}) == ""
 
 
 def test_project_follows_where_the_session_is_now():
