@@ -33,6 +33,7 @@ PILL_H = 20           # status pill height
 PILL_PAD = 9          # space either side of the status word inside its pill
 UPDATE_CHECK_MS = 30000   # how often to look for a newer installed version
 HOVER_MS = 450        # pause before the full-title tooltip appears
+HOVER_POLL_MS = 100   # how often to check where the mouse is (see poll_hover)
 MUTE_MIN = 60         # how long a click on the bell mutes banners
 STATUS_WORD = {"working": "working", "needs_input": "needs you", "permission": "permission",
                "idle": "idle", "watching": "watching"}
@@ -163,6 +164,7 @@ class Widget:
         self.root.protocol("WM_DELETE_WINDOW", self.hide)
         self.root.after(100, self.tick)
         self.root.after(PULSE_MS, self.pulse)
+        self.root.after(HOVER_POLL_MS, self.poll_hover)
         self.root.after(UPDATE_CHECK_MS, self.check_update)
 
     # ---- window position ----
@@ -210,8 +212,35 @@ class Widget:
         self.drag = (e.x_root - self.root.winfo_x(), e.y_root - self.root.winfo_y(), e.x_root, e.y_root)
 
     # ---- full title on hover ----
+    # macOS sends no mouse movement to a borderless, always-on-top window until
+    # it is clicked, and Tk's "current" item stays empty there. So hover polls
+    # the mouse position, which works whichever app is in front, and finds the
+    # card under it by position. <Motion> stays bound for a quicker response.
+    def card_at(self, x, y):
+        """The session id of the card under canvas point (x, y), or None."""
+        for item in reversed(self.c.find_overlapping(x, y, x, y)):
+            for t in self.c.gettags(item):
+                if t.startswith("card:"):
+                    return t[5:]
+        return None
+
+    def poll_hover(self):
+        if not self.alive:
+            return
+        try:
+            if not self.hidden and not self.drag:
+                px, py = self.root.winfo_pointerxy()
+                x, y = px - self.c.winfo_rootx(), py - self.c.winfo_rooty()
+                inside = 0 <= x < self.c.winfo_width() and 0 <= y < self.c.winfo_height()
+                self.hover_card(self.card_at(x, y) if inside else None)
+        except tk.TclError:
+            pass
+        self.root.after(HOVER_POLL_MS, self.poll_hover)
+
     def on_motion(self, e):
-        card = next((t[5:] for t in self.c.gettags("current") if t.startswith("card:")), None)
+        self.hover_card(self.card_at(e.x, e.y))
+
+    def hover_card(self, card):
         if card == self.tip_card:
             return
         self.hide_tip()
