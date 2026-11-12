@@ -196,18 +196,14 @@ def should_summarise(session, now=None):
 
 def summary_request(session):
     lines = [
-        "Below are the recent requests a user typed into a coding assistant session.",
-        "Write one line of at most eight words saying what the session is working on now.",
-        "Describe the work, not the user. Start with a verb ending in -ing. No quotes, no final full stop.",
-        "Reply with the line only.",
+        "Below are the most recent requests a user typed into a coding assistant session, oldest first.",
+        "Write one line of at most eight words (under 60 characters) naming the overall piece of work the session is on now.",
+        "Weigh the latest requests most. Name the goal, not a single small step.",
+        "Start with a verb ending in -ing. No quotes, no final full stop. Reply with the line only.",
         "",
     ]
-    if session.get("title"):
-        lines.append(f"Session title: {session['title']}")
     for i, p in enumerate(session.get("prompts") or [], 1):
         lines.append(f"Request {i}: {p}")
-    if session.get("activity"):
-        lines.append(f"Last step: {session['activity']}")
     return "\n".join(lines)
 
 

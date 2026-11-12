@@ -656,7 +656,8 @@ def test_should_summarise():
 def test_summary_request_mentions_prompts_and_title():
     req = w.summary_request({"title": "Widget polish", "prompts": ["add a timer", "fix the status"],
                              "activity": "Editing widget.py"})
-    assert "Widget polish" in req and "add a timer" in req and "fix the status" in req
+    assert "add a timer" in req and "fix the status" in req
+    assert "Editing widget.py" not in req          # one step would pull the summary off course
 
 
 def test_clean_summary():
