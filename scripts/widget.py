@@ -159,7 +159,7 @@ class Widget:
         self.tip = None
         self.tip_card = None
         self.tip_job = None
-        self.pet = w.pet_kind()     # "pebble", "kit", "sprout", or None when off
+        self.pet = w.pet_kind()     # "cat", "photon", "qubit", or None when off
         self.pet_spots = []         # (session id, x, y, status, colours, mark ink, card tag)
         self.pet_frame = 0
         self.work_s, self.work_longest = {}, {}
@@ -612,8 +612,11 @@ class Widget:
                 c.create_oval(*pts, fill=col[shape[2]], outline="", tags=tags)
             elif kind == "poly":
                 c.create_polygon(*pts, fill=col[shape[2]], outline="", tags=tags)
-            elif kind == "line":
-                c.create_line(*pts, fill=col[shape[2]], width=max(1, shape[3] * k), capstyle="round", tags=tags)
+            elif kind in ("line", "curve"):
+                c.create_line(*pts, fill=col[shape[2]], width=max(1, shape[3] * k), capstyle="round",
+                              smooth=kind == "curve", tags=tags)
+            elif kind == "ring":
+                c.create_oval(*pts, outline=col[shape[2]], width=max(1, shape[3] * k), tags=tags)
             elif kind == "arc":
                 c.create_arc(*pts, start=shape[3], extent=shape[4], style="arc", outline=col[shape[2]],
                              width=max(1, shape[5] * k), tags=tags)

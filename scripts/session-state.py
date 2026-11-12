@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import widgetlib as w
 
 LOG = os.path.join(w.WIDGET_DIR, "hooks.log")
-USAGE = "usage: /session-widget:widget [show | hide | quit | name <text> | summary on|off | pet pebble|kit|sprout|off | mute [minutes] | unmute]"
+USAGE = "usage: /session-widget:widget [show | hide | quit | name <text> | summary on|off | pet cat|photon|qubit|off | mute [minutes] | unmute]"
 
 def armed_by(payload):
     """What a PostToolUse event leaves Claude waiting on, or None."""
@@ -189,7 +189,8 @@ def resolve_process(me, ps=None):
     return parent, w.tty_of_pid(me, ps=ps), False
 
 
-PET_BLURB = {"pebble": "a stone pebble", "kit": "a fire kit", "sprout": "a leaf sprout"}
+PET_BLURB = {"cat": "Schrodinger's cat in its box", "photon": "a little star of light",
+             "qubit": "a qubit on its Bloch sphere"}
 
 
 def cmd(args, *, sessions_dir, widget_dir, tty, pid=None):
@@ -213,7 +214,7 @@ def cmd(args, *, sessions_dir, widget_dir, tty, pid=None):
         return "widget: banners on"
     if word == "pet":
         choice = (rest[0] if rest else "").lower()
-        choice = "pebble" if choice == "on" else choice
+        choice = "cat" if choice == "on" else choice
         if choice == "off":
             w.set_pet("off")
             return "widget: pets off"

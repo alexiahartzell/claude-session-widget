@@ -832,27 +832,29 @@ def test_every_pet_draws_every_status_inside_its_box_and_moves():
             frames = [w.pet_shapes(kind, status, f) for f in (0, 1)]
             assert frames[0] != frames[1], (kind, status)              # it actually moves
             for shapes in frames:
-                assert any(sh[0] == "oval" and sh[2] == "dark" for sh in shapes) or status == "idle"
+                has_eyes = any(sh[0] == "oval" and sh[2] == "dark" for sh in shapes)
+                assert has_eyes or status == "idle", (kind, status)
                 for sh in shapes:
                     pts = sh[1]
                     assert all(-0.5 <= v <= w.PET_GRID + 0.5 for v in pts), (kind, status, sh)
                     if sh[0] != "mark":
                         assert sh[2] in roles, sh
-    assert w.pet_shapes("pebble", "idle", 0)[-1] == ("mark", (19.5, 5), "z")
-    assert w.pet_shapes("kit", "permission", 1)[-1][2] == "?"
+    assert w.pet_shapes("cat", "idle", 0)[-1] == ("mark", (19.5, 3), "z")
+    assert w.pet_shapes("qubit", "permission", 1)[-1][2] == "?"
 
 
 def test_pet_choice_defaults_to_drop_and_saves(tmp_path):
     cfg = str(tmp_path / "config.json")
-    assert w.pet_kind(cfg) == "pebble" and w.pet_enabled(cfg)
-    w.set_pet("sprout", cfg)
-    assert w.pet_kind(cfg) == "sprout"
+    assert w.pet_kind(cfg) == "cat" and w.pet_enabled(cfg)
+    w.set_pet("photon", cfg)
+    assert w.pet_kind(cfg) == "photon"
     w.set_pet("off", cfg)
     assert w.pet_kind(cfg) is None and not w.pet_enabled(cfg)
     w._save_config_field(cfg, pet=True)                  # the 1.15.0 setting
-    assert w.pet_kind(cfg) == "pebble"
-    w._save_config_field(cfg, pet="drop")                # the 1.16.0 water drop
-    assert w.pet_kind(cfg) == "pebble"
+    assert w.pet_kind(cfg) == "cat"
+    for old in ("drop", "pebble", "kit", "sprout"):       # earlier pets
+        w._save_config_field(cfg, pet=old)
+        assert w.pet_kind(cfg) == "cat"
 
 
 # ---- daily stats ----
