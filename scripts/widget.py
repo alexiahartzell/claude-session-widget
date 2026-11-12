@@ -484,8 +484,9 @@ class Widget:
         c.config(height=height)
         rounded(c, 0, 0, W_PX, height, RADIUS + 4, fill=th["bg"], outline=th["outline"], tags=("panel",))
         c.tag_lower("panel")
-        # Hovering the header shows today's stats. An empty rectangle still catches the pointer.
-        c.create_rectangle(0, 0, W_PX - 160, head_h, fill="", outline="", tags=("stats",))
+        # Hovering the header shows today's stats. The target needs a real fill: Tk
+        # only finds an unfilled rectangle under the pointer on its outline.
+        c.create_rectangle(RADIUS, 2, W_PX - 160, head_h, fill=th["bg"], outline="", tags=("stats",))
         c.create_text(PAD + 8, head_h / 2, text="claude", anchor="w", fill=th["dim"], font=self.f_title,
                       tags=("stats",))
         until = w.mute_until()
