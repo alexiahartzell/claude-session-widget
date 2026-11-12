@@ -4,7 +4,7 @@
 
 If you run several Claude Code sessions in different Terminal tabs, it is easy to lose track of the one quietly waiting for an answer. This panel sits in the corner of your screen, lists each session with a short summary of what it is doing, and pulses the ones that are waiting on you. Click a card to jump straight to that tab.
 
-Each Claude tab also gets its own background colour, and its card in the panel matches. Pick from seventeen colour schemes, each in a light and a dark version.
+Each Claude tab also gets its own background colour, and its card in the panel matches. Pick from eighteen colour schemes, each in a light and a dark version.
 
 <p align="center">
   <img src="docs/panel.png" alt="The widget panel listing five Claude Code sessions, each with a one-line summary, its project name and a status pill with a timer. Two are outlined and pulsing: one waiting for permission and one waiting for input. The others are watching a background job, working with two subagents, and idle." width="380">
@@ -38,7 +38,11 @@ Each card is one Claude Code session.
 - **The second line** is where and what now. It starts with the project, in the card's colour: the git checkout the session is working in, or else its folder. While Claude works, it adds the step Claude is on, such as "Editing loader.py". While Claude watches a background job, it says "your turn" and what it is waiting on, such as "your turn · waiting on a background job". You can reply, and Claude also resumes on its own when the job ends. When it is only your turn, it shows just the project.
 - **The summary** in the title is written by a small model (Haiku, through your own `claude` command) from your last few prompts. Turn it off with `/widget summary off`.
 - **A third line appears while subagents run.** It counts them and lists what each one is doing. Background agents stay listed until they finish.
-- **Hover over a card** to see its full title, the chat's original name, the folder, and each running agent.
+- **Hover over a card** to see its full title, the chat's original name, the folder, each running agent, and that session's prompts and working time today.
+- **Hover over the top bar** to see today's stats in three blocks.
+  - **Today:** prompts sent, sessions used, how long Claude worked, its longest unbroken stretch, and the most sessions working at once.
+  - **Waiting on you:** how many times Claude needed you, your typical (median) reply time, the longest wait and where, and the total.
+  - **Trends:** prompts, working time and typical reply compared with yesterday and your average over the last seven active days.
 - **The pill on the right** is the session's status. Under it is how long the session has been in that status, so you can see which one has waited longest.
 
 | Status | Meaning | Card |
@@ -114,10 +118,10 @@ Only one panel ever runs, however many sessions you open.
 
 Every Terminal tab running Claude Code gets its own background colour when the session starts. No two open tabs share a colour, and each card in the panel matches its tab. When the session ends, the tab goes back to its original colours.
 
-There are seventeen colour schemes, and each comes in a dark and a light version. Light mode also turns the tab's text dark and gives the panel a light background, so it works whatever your Terminal profile looks like.
+There are eighteen colour schemes, and each comes in a dark and a light version. Light mode also turns the tab's text dark and gives the panel a light background, so it works whatever your Terminal profile looks like.
 
 <p align="center">
-  <img src="docs/schemes.png" alt="A sheet of all seventeen colour schemes. Each scheme is a row of ten sample cards, shown twice: once on the dark panel and once on the light panel." width="100%">
+  <img src="docs/schemes.png" alt="A sheet of all eighteen colour schemes. Each scheme is a row of ten sample cards, shown twice: once on the dark panel and once on the light panel." width="100%">
 </p>
 <p align="center"><sub>Each scheme in its dark version, then its light version, with colours in rainbow order so schemes are easy to compare.</sub></p>
 
@@ -135,6 +139,7 @@ There are seventeen colour schemes, and each comes in a dark and a light version
 | **nordic** | 10 | Only cool greys with a hint of blue or green. |
 | **ocean** | 10 | Only sea greens, teals and blues, from shallows to the deep. |
 | **aurora** | 10 | Only northern-lights colours: greens, teals, blues and violets. |
+| **green** | 10 | Only greens, from olive and lime through emerald to sea green. |
 | **forest** | 10 | Only greens and woody browns. |
 | **desert** | 10 | Only soft earth colours: sand, clay, terracotta and sage. |
 | **autumn** | 10 | Only autumn leaves: maroon, rust, pumpkin, ochre and olive. |
@@ -388,6 +393,7 @@ Everything stays on your Mac, except the summaries.
 - **What it reads:** each session's transcript to find its title and what it is waiting on, the titles of your Terminal tabs, and Claude Code's plugin list to spot updates.
 - **What it changes:** the background and text colour of Terminal tabs running Claude Code, put back when each session ends.
 - **What it stores:** up to six of your latest prompts per session, cut to 300 characters each, plus the summary, the current step and the folder. They live in the state folder, and each file is deleted when its session ends.
+- **Daily stats** keep only counts and seconds per session, never prompt text, in `stats.json` in the state folder. Only the last fourteen days are kept, which is what the seven-day trend needs.
 
 ---
 

@@ -72,6 +72,10 @@ def handle(payload, *, sessions_dir, tint_dir, pid, tty, notify, launch, summari
         if payload.get("source", "startup") == "startup" or not existing:
             fields.update(status="idle", task="")
     elif event == "UserPromptSubmit":
+        try:
+            w.record_prompt(sid, payload.get("prompt", ""), path=os.path.join(os.path.dirname(sessions_dir), "stats.json"))
+        except Exception as e:
+            log(f"stats: {e!r}")
         cur = w.load_session(sessions_dir, sid) or {}
         fields = {"status": "working", "task": w.truncate_task(payload.get("prompt", "")),
                   "armed": None, "activity": None,

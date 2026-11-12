@@ -821,3 +821,108 @@ def test_hover_card_schedules_the_tip_once_per_card():
     assert calls == [widget.HOVER_MS] and fake.tip_card == "a"
     hover(None)                                  # moved off: timer cancelled
     assert calls[-1] == "cancel" and fake.tip_card is None
+
+
+# ---- daily stats ----
+
+def test_prompts_work_and_waits_add_up_for_today(tmp_path):
+    p, t = str(tmp_path / "stats.json"), 1_800_000_000
+    w.record_prompt("a", "fix the plot", p, now=t)
+    w.record_prompt("a", "and the axis", p, now=t)
+    w.record_prompt("b", "hello", p, now=t)
+    w.record_prompt("a", "<task-notification>done</task-notification>", p, now=t)   # not yours
+    w.record_prompt("a", "   ", p, now=t)
+    w.add_activity({"a": 600, "b": 120}, {"a": 400}, [("a", 30), ("b", 200)], 2, p, now=t)
+    w.add_activity({"a": 1200}, {"a": 900, "b": 100}, [("a", 90)], 1, p, now=t)
+    day = w.today_stats(p, now=t)
+    assert day["prompts"] == 3 and day["work_s"] == 1920
+    assert day["by_session"]["a"] == {"prompts": 2, "work_s": 1800}
+    assert day["longest_s"] == 900 and day["longest_sid"] == "a"
+    assert day["asks"] == 3 and day["wait_s"] == 320 and day["waits"] == [30, 200, 90]
+    assert day["longest_wait_s"] == 200 and day["longest_wait_sid"] == "b" and day["peak"] == 2
+    assert w.today_stats(p, now=t + 86400) == {}                 # a new day starts empty
+    assert w.add_activity(path=p, now=t) is None                 # nothing to add
+
+
+def test_stats_keep_two_weeks(tmp_path):
+    p = str(tmp_path / "stats.json")
+    for d in range(20):
+        w.record_prompt("a", "hi", p, now=1_800_000_000 + d * 86400)
+    assert len(w._read_json(p)) == w.STATS_KEEP_DAYS
+
+
+def test_stats_lines_read_naturally():
+    assert w.stats_lines({}, "2026-11-12") == ["today", "nothing yet, a fresh start"]
+    day = {"prompts": 14, "work_s": 7800, "longest_s": 1500, "longest_sid": "a", "peak": 3,
+           "asks": 3, "wait_s": 3900, "waits": [60, 240, 3600], "longest_wait_s": 3600, "longest_wait_sid": "b",
+           "by_session": {"a": {"prompts": 9, "work_s": 6000}, "b": {"prompts": 5, "work_s": 1800}}}
+    data = {"2026-11-12": day,
+            "2026-11-11": {"prompts": 20, "work_s": 10800, "waits": [300]},
+            "2026-11-10": {"prompts": 10, "work_s": 3600, "waits": [60, 120]},
+            "2026-11-09": {},                                   # an empty day is not averaged
+            "2026-11-13": {"prompts": 99}}                      # a later day is ignored
+    assert w.stats_lines(data, "2026-11-12", {"a": "Fitting spectra", "b": "Notes"}) == [
+        "today",
+        "14 prompts, 2 sessions",
+        "Claude worked 2 h 10 min",
+        "longest stretch 25 min on Fitting spectra",
+        "up to 3 sessions working at once",
+        "## waiting on you",
+        "Claude needed you 3 times",
+        "typical reply 4 min · longest 1 h on Notes",
+        "1 h 5 min in all",
+        "## trends",
+        "prompts 14 · yesterday 20 · week avg 15",
+        "worked 2 h 10 min · yesterday 3 h · week avg 2 h",
+        "typical reply 4 min · yesterday 5 min · week avg 3 min",
+    ]
+
+
+def test_stats_lines_first_day_has_no_trends():
+    data = {"2026-11-12": {"prompts": 1, "work_s": 34, "by_session": {"a": {"prompts": 1, "work_s": 30},
+                                                                    "helper": {"work_s": 4}}}}
+    assert w.stats_lines(data, "2026-11-12") == [
+        "today", "1 prompt, 1 session", "Claude worked 34 s",
+        "## waiting on you", "Claude has not had to wait on you"]
+
+
+def test_session_stats_line_shows_on_every_card():
+    day = {"by_session": {"a": {"prompts": 3, "work_s": 2400}, "b": {"prompts": 1, "work_s": 20}}}
+    assert w.session_stats_line(day, "a") == "today: 3 prompts · worked 40 min"
+    assert w.session_stats_line(day, "b") == "today: 1 prompt · worked 20 s"
+    assert w.session_stats_line(day, "c") == "today: 0 prompts · worked 0 s"
+    assert w.session_stats_line({}, "c") == "today: 0 prompts · worked 0 s"
+
+
+def test_card_at_returns_stats_over_the_header():
+    fake, _ = _hover_widget({1: ((0, 0, 220, 34), ("stats",)), 2: ((10, 40, 370, 100), ("card:a",))})
+    assert fake.card_at(50, 10) == "stats"
+    assert fake.card_at(300, 10) is None                       # the mute and close corner
+    assert fake.card_at(50, 60) == "a"
+
+
+def test_count_activity_times_work_waits_and_parallel_sessions(monkeypatch):
+    import types, widget
+    saved = []
+    monkeypatch.setattr(w, "add_activity", lambda *a: saved.append(a))
+    clock = [1000.0]
+    monkeypatch.setattr(widget.time, "time", lambda: clock[0])
+    fake = types.SimpleNamespace(work_s={}, work_longest={}, waits=[], peak=0, asking={},
+                                 work_t=1000.0, work_flushed=1000.0)
+    fake.flush_work = types.MethodType(widget.Widget.flush_work, fake)
+    count = types.MethodType(widget.Widget.count_activity, fake)
+    clock[0] = 1002.0
+    count([{"session_id": "a", "status": "working", "status_since": 900},
+           {"session_id": "b", "status": "working", "status_since": 990},
+           {"session_id": "c", "status": "needs_input", "status_since": 950}])
+    clock[0] = 1010.0
+    count([{"session_id": "a", "status": "working", "status_since": 900},
+           {"session_id": "b", "status": "needs_input", "status_since": 1008},
+           {"session_id": "c", "status": "working", "status_since": 1009}])   # you answered c
+    clock[0] = 1600.0                                        # the Mac slept: count at most 5 s
+    count([{"session_id": "a", "status": "working", "status_since": 900}])  # b's session ended
+    (work, longest, waits, peak), = saved
+    assert work == {"a": 12.0, "b": 2.0, "c": 5.0}
+    assert longest == {"a": 700, "b": 12, "c": 1}
+    assert waits == [("c", 60.0), ("b", 592.0)] and peak == 2
+    assert fake.work_s == {} and fake.asking == {}

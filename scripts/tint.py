@@ -14,7 +14,7 @@ Manual use (the /tint command):
   tint.py all          tint every tab that has a running claude
   tint.py scheme NAME  switch scheme: muted, jewel, dusk, ocean, colourblind, forest,
                        ember, aurora, desert, berry, nordic, autumn, neon, galaxy, tropical,
-                       dracula, crewtractor
+                       green, dracula, crewtractor
   tint.py mode MODE    switch mode: auto (follow macOS), dark, light
 Only acts inside Apple Terminal.
 """
@@ -103,6 +103,11 @@ DARK = {
     "tropical": [
         ("hibiscus", "4d0926"), ("pineapple", "003a0f"), ("flamingo", "47070c"), ("palm", "174d2e"), ("coral", "381a01"),
         ("reef", "023832"), ("papaya", "413413"), ("lagoon", "14494f"), ("mango", "40410a"), ("cove", "062a3a"),
+    ],
+    # Only greens, from olive and lime through emerald to sea green.
+    "green": [
+        ("sage", "4e562d"), ("chartreuse", "39590b"), ("moss", "1e2d09"), ("clover", "0f4f03"), ("lichen", "182616"),
+        ("pine", "062706"), ("emerald", "005e23"), ("spruce", "0e2018"), ("jade", "146542"), ("sea green", "0b645c"),
     ],
     # The Dracula palette (as in the JetBrains Dracula theme), darkened for tab backgrounds.
     "dracula": [

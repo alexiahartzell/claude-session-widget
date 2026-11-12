@@ -446,3 +446,12 @@ def test_subagent_stop_refreshes_background(tmp_path):
     new, _ = run(tmp_path, {"hook_event_name": "SubagentStop", "session_id": "s1", "agent_type": "x",
                             "background_tasks": [_bg("subagent")], "session_crons": []})
     assert new["background"] == "a subagent"
+
+
+def test_prompts_are_counted_for_daily_stats(tmp_path):
+    _armed_session(tmp_path)
+    run(tmp_path, {"hook_event_name": "UserPromptSubmit", "session_id": "s1", "prompt": "next"})
+    run(tmp_path, {"hook_event_name": "UserPromptSubmit", "session_id": "s1",
+                   "prompt": "<task-notification>x</task-notification>"})
+    day = w.today_stats(str(tmp_path / "stats.json"))
+    assert day["prompts"] == 2 and day["by_session"]["s1"]["prompts"] == 2

@@ -34,6 +34,7 @@ PILL_PAD = 9          # space either side of the status word inside its pill
 UPDATE_CHECK_MS = 30000   # how often to look for a newer installed version
 HOVER_MS = 450        # pause before the full-title tooltip appears
 HOVER_POLL_MS = 100   # how often to check where the mouse is (see poll_hover)
+WORK_FLUSH_S = 30     # how often working time is saved to the daily stats
 MUTE_MIN = 60         # how long a click on the bell mutes banners
 STATUS_WORD = {"working": "working", "needs_input": "needs you", "permission": "permission",
                "idle": "idle", "watching": "watching"}
@@ -156,6 +157,10 @@ class Widget:
         self.tip = None
         self.tip_card = None
         self.tip_job = None
+        self.work_s, self.work_longest = {}, {}
+        self.waits, self.peak = [], 0
+        self.asking = {}            # session id -> when it started needing you
+        self.work_t = self.work_flushed = time.time()
 
         self.restore_pos()
         self.write_pid()
@@ -222,6 +227,8 @@ class Widget:
             for t in self.c.gettags(item):
                 if t.startswith("card:"):
                     return t[5:]
+                if t == "stats":
+                    return "stats"
         return None
 
     def poll_hover(self):
@@ -259,10 +266,16 @@ class Widget:
 
     def show_tip(self, card):
         self.tip_job = None
-        s = next((x for x in self.sessions if x["session_id"] == card), None)
-        if not s or self.drag:
+        if self.drag:
             return
-        th = self.theme()
+        day = w.today_stats()
+        if card == "stats":
+            labels = {x["session_id"]: w.display_label(x) for x in self.sessions}
+            self.show_lines(w.stats_lines(w.read_stats(), labels=labels))
+            return
+        s = next((x for x in self.sessions if x["session_id"] == card), None)
+        if not s:
+            return
         lines = [w.display_label(s)]
         chat = s.get("title") or s.get("tab_title")
         if chat and chat != lines[0]:
@@ -272,6 +285,13 @@ class Widget:
             lines.append(folder.replace(w.HOME, "~", 1))
         for a in s.get("agents") or []:
             lines.append(f"agent: {a.get('desc')}" + (" (background)" if a.get("bg") else ""))
+        lines.append(w.session_stats_line(day, card))
+        self.show_lines(lines)
+
+    def show_lines(self, lines):
+        """A tooltip beside the panel: the first line bold, the rest dim.
+        A line starting with "## " is a section head, with a little space above."""
+        th = self.theme()
         tip = tk.Toplevel(self.root)
         tip.overrideredirect(True)
         tip.attributes("-topmost", True)
@@ -282,6 +302,10 @@ class Widget:
         tk.Label(body, text=lines[0], bg=th["bg"], fg=th["fg"], font=self.f_label,
                  justify="left", wraplength=420).pack(anchor="w")
         for line in lines[1:]:
+            if line.startswith("## "):
+                tk.Label(body, text=line[3:], bg=th["bg"], fg=th["fg"], font=self.f_tag,
+                         justify="left").pack(anchor="w", pady=(6, 0))
+                continue
             tk.Label(body, text=line, bg=th["bg"], fg=th["dim"], font=self.f_sub,
                      justify="left", wraplength=420).pack(anchor="w")
         tip.update_idletasks()
@@ -316,6 +340,7 @@ class Widget:
             sys.exit(0)
 
     def quit(self):
+        self.flush_work()
         try:
             os.remove(PID_FILE)
             self.pid_lock.close()
@@ -378,6 +403,7 @@ class Widget:
             self.handle_attention(sessions)
             self.handle_empty(sessions)
             self.mode = w.effective_mode()
+            self.count_activity(sessions)
             key = [self.mode, w.mute_until() > time.time() and int(w.mute_until() // 60)] + [(s["session_id"], s.get("status"), w.subtitle(s), w.display_label(s),
                                   s.get("title"), s.get("task"), s.get("activity"), s.get("color"),
                                   w.project_tag(s), w.elapsed_text(s),
@@ -455,7 +481,11 @@ class Widget:
         c.config(height=height)
         rounded(c, 0, 0, W_PX, height, RADIUS + 4, fill=th["bg"], outline=th["outline"], tags=("panel",))
         c.tag_lower("panel")
-        c.create_text(PAD + 8, head_h / 2, text="claude", anchor="w", fill=th["dim"], font=self.f_title)
+        # Hovering the header shows today's stats. The target needs a real fill: Tk
+        # only finds an unfilled rectangle under the pointer on its outline.
+        c.create_rectangle(RADIUS, 2, W_PX - 160, head_h, fill=th["bg"], outline="", tags=("stats",))
+        c.create_text(PAD + 8, head_h / 2, text="claude", anchor="w", fill=th["dim"], font=self.f_title,
+                      tags=("stats",))
         until = w.mute_until()
         if until > time.time():
             word, ink = "banners muted until " + time.strftime("%H:%M", time.localtime(until)), th["fg"]
@@ -555,6 +585,43 @@ class Widget:
         if since:
             c.create_text(right - pw / 2, py + PILL_H + 9, text=since, fill=th["dim"],
                           font=self.f_time, tags=(tag,))
+
+    # ---- daily stats ----
+    def count_activity(self, sessions):
+        """Add the time since the last tick to every working session, time each
+        stretch where Claude waits on you, and note how many work at once."""
+        now = time.time()
+        dt = min(now - self.work_t, 5.0)                # a long gap means the Mac slept
+        self.work_t = now
+        working = 0
+        seen = set()
+        for s in sessions:
+            sid, status = s["session_id"], s.get("status")
+            seen.add(sid)
+            since = w._num(s.get("status_since") or now)
+            if status == "working":
+                working += 1
+                self.work_s[sid] = self.work_s.get(sid, 0) + dt
+                self.work_longest[sid] = max(self.work_longest.get(sid, 0), now - since)
+            if status in w.ATTENTION:
+                self.asking.setdefault(sid, since)
+            elif sid in self.asking:                    # you answered
+                self.waits.append((sid, now - self.asking.pop(sid)))
+        for sid in [x for x in self.asking if x not in seen]:
+            self.waits.append((sid, now - self.asking.pop(sid)))   # the session ended
+        self.peak = max(self.peak, working)
+        if now - self.work_flushed >= WORK_FLUSH_S:
+            self.flush_work()
+
+    def flush_work(self):
+        try:
+            w.add_activity({k: round(v, 1) for k, v in self.work_s.items()},
+                           {k: round(v) for k, v in self.work_longest.items()},
+                           self.waits, self.peak)
+        except Exception as e:
+            log(f"stats: {e!r}")
+        self.work_s, self.work_longest, self.waits, self.peak = {}, {}, [], 0
+        self.work_flushed = time.time()
 
     def pulse(self):
         if not self.alive:

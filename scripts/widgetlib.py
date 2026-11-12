@@ -434,7 +434,7 @@ CONFIG_PATH = os.path.join(TINT_DIR, "scheme.json")
 SCHEME_NAMES = ("muted", "jewel", "dusk", "ocean", "colourblind",
                 "forest", "ember", "aurora", "desert", "berry",
                 "nordic", "autumn", "neon", "galaxy", "tropical",
-                "dracula", "crewtractor")
+                "green", "dracula", "crewtractor")
 MODES = ("auto", "dark", "light")
 
 # Panel colours per mode: background, outline, text, secondary text.
@@ -894,3 +894,191 @@ def mirror_claude_sessions(claude_dir, sessions_dir, tint_dir=TINT_DIR,
             if status == "needs_input" and was != "needs_input":
                 newly_attention.append(new)
     return newly_attention
+
+
+# ---- daily stats, shown when you hover the panel header ----
+# Hooks count prompts; the widget adds the time each session spends working.
+
+STATS_PATH = os.path.join(WIDGET_DIR, "stats.json")
+STATS_KEEP_DAYS = 14
+
+
+def today(now=None):
+    return time.strftime("%Y-%m-%d", time.localtime(time.time() if now is None else now))
+
+
+def _update_stats(fn, path=None, now=None):
+    """Locked read-modify-write of today's stats. fn(day) changes day in place."""
+    path = path or STATS_PATH
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path + ".lock", "a+") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        data = _read_json(path) or {}
+        key = today(now)
+        day = data.setdefault(key, {})
+        fn(day)
+        for old in sorted(data)[:-STATS_KEEP_DAYS]:
+            del data[old]
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".stats-")
+        with os.fdopen(fd, "w") as f:
+            json.dump(data, f)
+        os.replace(tmp, path)
+    return day
+
+
+def _by(day, sid):
+    return day.setdefault("by_session", {}).setdefault(sid, {})
+
+
+def record_prompt(sid, prompt, path=None, now=None):
+    """Count a prompt you sent. Task notifications are Claude's own wake-ups, not yours."""
+    text = (prompt or "").lstrip()
+    if not sid or not text or text.startswith("<task-notification>"):
+        return None
+
+    def fn(day):
+        day["prompts"] = day.get("prompts", 0) + 1
+        b = _by(day, sid)
+        b["prompts"] = b.get("prompts", 0) + 1
+    return _update_stats(fn, path, now)
+
+
+WAITS_KEPT = 300          # reply times kept per day, for the typical (median) reply
+
+
+def add_activity(work=None, longest=None, waits=(), peak=0, path=None, now=None):
+    """Fold what the panel saw into today's stats.
+    work: {sid: seconds working}. longest: {sid: longest unbroken working stretch}.
+    waits: [(sid, seconds)] for each time Claude needed you, ended by your reply.
+    peak: the most sessions working at once."""
+    work, longest = work or {}, longest or {}
+    if not (work or longest or waits or peak):
+        return None
+
+    def fn(day):
+        for sid, secs in work.items():
+            day["work_s"] = day.get("work_s", 0) + secs
+            b = _by(day, sid)
+            b["work_s"] = b.get("work_s", 0) + secs
+        for sid, secs in longest.items():
+            if secs > day.get("longest_s", 0):
+                day["longest_s"], day["longest_sid"] = secs, sid
+        for sid, secs in waits:
+            day["asks"] = day.get("asks", 0) + 1
+            day["wait_s"] = day.get("wait_s", 0) + secs
+            day["waits"] = (day.get("waits", []) + [round(secs)])[-WAITS_KEPT:]
+            if secs > day.get("longest_wait_s", 0):
+                day["longest_wait_s"], day["longest_wait_sid"] = round(secs), sid
+        if peak > day.get("peak", 0):
+            day["peak"] = peak
+    return _update_stats(fn, path, now)
+
+
+def read_stats(path=None):
+    return _read_json(path or STATS_PATH) or {}
+
+
+def today_stats(path=None, now=None):
+    return read_stats(path).get(today(now), {})
+
+
+def duration_text(secs):
+    secs = secs or 0
+    if secs < 60:
+        return f"{int(secs)} s" if secs >= 1 else "0 s"
+    mins = int(secs // 60)
+    if mins < 60:
+        return f"{mins} min"
+    h, m = divmod(mins, 60)
+    return f"{h} h {m} min" if m else f"{h} h"
+
+
+def _plural(n, word):
+    return f"{n} {word}" + ("" if n == 1 else "s")
+
+
+def _median(xs):
+    xs = sorted(xs or [])
+    if not xs:
+        return None
+    mid = len(xs) // 2
+    return xs[mid] if len(xs) % 2 else (xs[mid - 1] + xs[mid]) / 2
+
+
+def _sessions(day):
+    """Sessions you used today. Brief background runs (no prompt, under a
+    minute of work, such as the summary helper) do not count."""
+    return sum(1 for b in (day.get("by_session") or {}).values() if b.get("prompts") or b.get("work_s", 0) >= 60)
+
+
+def _active(day):
+    return bool(day.get("prompts") or day.get("work_s") or day.get("asks"))
+
+
+def _week(data, key):
+    """The up-to-seven active days before `key`, newest first."""
+    return [data[k] for k in sorted((k for k in data if k < key), reverse=True) if _active(data[k])][:7]
+
+
+def _avg(days, fn):
+    vals = [v for v in (fn(d) for d in days) if v is not None]
+    return sum(vals) / len(vals) if vals else None
+
+
+def _trend(label, today_v, yday_v, week_v, fmt):
+    parts = [f"{label} {fmt(today_v)}"]
+    if yday_v is not None:
+        parts.append(f"yesterday {fmt(yday_v)}")
+    if week_v is not None:
+        parts.append(f"week avg {fmt(week_v)}")
+    return " · ".join(parts)
+
+
+def stats_lines(data, key=None, labels=None):
+    """Tooltip lines for the header. A line starting with "## " is a section head.
+    data is the whole stats file, key the day to show (today by default)."""
+    key = key or today()
+    labels = labels or {}
+    day = data.get(key, {})
+    if not _active(day):
+        return ["today", "nothing yet, a fresh start"]
+    name = lambda sid: f" on {labels[sid]}" if sid in labels else ""
+    lines = ["today",
+             f"{_plural(day.get('prompts', 0), 'prompt')}, {_plural(_sessions(day), 'session')}",
+             f"Claude worked {duration_text(day.get('work_s', 0))}"]
+    if day.get("longest_s", 0) >= 60:
+        lines.append(f"longest stretch {duration_text(day['longest_s'])}{name(day.get('longest_sid'))}")
+    if day.get("peak", 0) > 1:
+        lines.append(f"up to {day['peak']} sessions working at once")
+
+    lines.append("## waiting on you")
+    if day.get("asks"):
+        lines.append(f"Claude needed you {_plural(day['asks'], 'time')}")
+        lines.append(f"typical reply {duration_text(_median(day.get('waits')))}"
+                     f" · longest {duration_text(day.get('longest_wait_s', 0))}{name(day.get('longest_wait_sid'))}")
+        lines.append(f"{duration_text(day.get('wait_s', 0))} in all")
+    else:
+        lines.append("Claude has not had to wait on you")
+
+    yday = data.get(time.strftime("%Y-%m-%d", time.localtime(time.mktime(time.strptime(key, "%Y-%m-%d")) - 43200)))
+    yday = yday if yday and _active(yday) else None
+    week = _week(data, key)
+    if yday or week:
+        lines.append("## trends")
+        get = lambda d, k: (d or {}).get(k, 0) if d else None
+        lines.append(_trend("prompts", day.get("prompts", 0), get(yday, "prompts"),
+                            _avg(week, lambda d: d.get("prompts", 0)), lambda v: str(round(v))))
+        lines.append(_trend("worked", day.get("work_s", 0), get(yday, "work_s"),
+                            _avg(week, lambda d: d.get("work_s", 0)), duration_text))
+        if day.get("waits"):
+            lines.append(_trend("typical reply", _median(day["waits"]),
+                                _median(yday.get("waits")) if yday else None,
+                                _avg(week, lambda d: _median(d.get("waits"))), duration_text))
+    return lines
+
+
+def session_stats_line(day, sid):
+    """One line for a card's tooltip: this session's share of today. Every card
+    gets it, zeros included, so cards are easy to compare."""
+    b = (day.get("by_session") or {}).get(sid) or {}
+    return f"today: {_plural(b.get('prompts', 0), 'prompt')} · worked {duration_text(b.get('work_s', 0))}"
