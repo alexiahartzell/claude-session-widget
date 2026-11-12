@@ -9,11 +9,14 @@ import widgetlib as w
 
 POLL_MS = 500
 TAB_POLL_S = 1.5      # how often to read the Terminal tab titles
-TAB_SCRIPT = '''set out to ""
+# `tab` inside the tell block means a Terminal tab, so the separator is set outside it.
+TAB_SCRIPT = '''set sep to character id 9
+set out to ""
+if application "Terminal" is not running then return ""
 tell application "Terminal"
 repeat with wnd in windows
 repeat with t in tabs of wnd
-set out to out & (tty of t) & tab & (custom title of t) & linefeed
+set out to out & (tty of t) & sep & (custom title of t) & linefeed
 end repeat
 end repeat
 end tell
@@ -70,10 +73,9 @@ class TabWatcher(threading.Thread):
     def run(self):
         while True:
             try:
-                if subprocess.run(["pgrep", "-x", "Terminal"], capture_output=True).returncode == 0:
-                    out = subprocess.run(["osascript", "-e", TAB_SCRIPT], capture_output=True,
-                                         text=True, timeout=5).stdout
-                    self.update(w.parse_tab_titles(out))
+                out = subprocess.run(["osascript", "-e", TAB_SCRIPT], capture_output=True,
+                                     text=True, timeout=5).stdout
+                self.update(w.parse_tab_titles(out))
             except Exception as e:
                 log(f"tabs: {e!r}")
             time.sleep(TAB_POLL_S)
