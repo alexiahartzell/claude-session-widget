@@ -108,9 +108,9 @@ def handle(payload, *, sessions_dir, tint_dir, pid, tty, notify, launch, summari
         if payload.get("tool_name") in w.AGENT_TOOLS:
             fields["agents"] = w.agent_started(w.prune_agents(cur.get("agents")),
                                                payload.get("tool_use_id"), payload.get("tool_input"))
-        if cur.get("status") == "watching":
-            fields.update(status="working", armed=None)   # the watcher fired, Claude resumed
-        elif cur.get("status") in ("permission", "needs_input", "idle"):
+        if cur.get("status") in ("watching", "permission", "needs_input", "idle"):
+            # A new step means Claude is busy again. Keep "armed": a blocked Stop also
+            # resumes the turn while the job still runs. Only a new prompt clears it.
             fields.update(status="working")               # a new step means Claude is busy again
         elif ("agents" not in fields and fields["activity"] == cur.get("activity")
               and fields.get("cwd_now") == cur.get("cwd_now")):
@@ -120,6 +120,7 @@ def handle(payload, *, sessions_dir, tint_dir, pid, tty, notify, launch, summari
             _, new = w.update_session_fn(sessions_dir, sid, lambda c: fields, touch=False)
             return new
     elif event == "Stop":
+        log(f"Stop fields: {sorted(payload)}")    # to learn whether Stop carries background_tasks
         cur = w.load_session(sessions_dir, sid) or {}
         fields = {"status": "watching" if cur.get("armed") else "needs_input"}
         if cur.get("agents"):              # foreground agents are done once Claude stops

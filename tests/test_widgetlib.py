@@ -621,7 +621,7 @@ def test_reconcile_stuck_working_becomes_needs_input():
 def test_reconcile_spinner_means_working():
     assert w.reconcile({"status": "needs_input"}, "busy", held_s=3) == {"status": "working"}
     assert w.reconcile({"status": "idle"}, "busy", held_s=3) == {"status": "working"}
-    assert w.reconcile({"status": "watching", "armed": "a timer"}, "busy", held_s=3) == {"status": "working", "armed": None}
+    assert w.reconcile({"status": "watching", "armed": "a timer"}, "busy", held_s=3) == {"status": "working"}
     assert w.reconcile({"status": "permission"}, "busy", held_s=30) is None   # never hide a permission prompt
     assert w.reconcile({"status": "working"}, "busy", held_s=30) is None
     assert w.reconcile({"status": "working"}, None, held_s=30) is None        # not a Claude tab, or not Terminal
