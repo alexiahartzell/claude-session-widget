@@ -219,6 +219,75 @@ def set_summaries(on, path=None):
         json.dump(cfg, f)
 
 
+def _config(path):
+    return _read_json(path or WIDGET_CONFIG) or {}
+
+
+def _save_config_field(path, **fields):
+    path = path or WIDGET_CONFIG
+    cfg = dict(_config(path), **fields)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(cfg, f)
+
+
+def mute_banners(minutes, path=None, now=None):
+    """Silence macOS banners for this many minutes; 0 unmutes. Cards still pulse."""
+    now = time.time() if now is None else now
+    _save_config_field(path, mute_until=now + minutes * 60 if minutes > 0 else 0)
+
+
+def mute_until(path=None):
+    return _num(_config(path).get("mute_until"))
+
+
+def banners_muted(path=None, now=None):
+    return mute_until(path) > (time.time() if now is None else now)
+
+
+# ---- subagents ----
+
+AGENT_TOOLS = ("Agent", "Task")
+AGENT_MAX_AGE_S = 2 * 3600
+
+
+def agent_started(agents, tool_use_id, inp, now=None):
+    inp = inp if isinstance(inp, dict) else {}
+    out = [a for a in (agents or []) if a.get("id") != tool_use_id]
+    out.append({"id": tool_use_id or f"agent-{time.time()}", "desc": _short(inp.get("description") or "working", 50),
+                "type": inp.get("subagent_type") or "", "bg": bool(inp.get("run_in_background")),
+                "started": time.time() if now is None else now})
+    return out
+
+
+def agent_returned(agents, tool_use_id):
+    return [a for a in (agents or []) if a.get("id") != tool_use_id]
+
+
+def agent_stopped(agents, agent_type):
+    """SubagentStop does not say which call it was. Drop the oldest agent of the
+    same type, else the oldest foreground one, else the oldest of all."""
+    agents = list(agents or [])
+    pick = ([a for a in agents if agent_type and a.get("type") == agent_type]
+            or [a for a in agents if not a.get("bg")] or agents)
+    if pick:
+        agents.remove(pick[0])
+    return agents
+
+
+def prune_agents(agents, now=None):
+    now = time.time() if now is None else now
+    return [a for a in (agents or []) if now - _num(a.get("started")) < AGENT_MAX_AGE_S]
+
+
+def agents_text(agents):
+    agents = agents or []
+    if not agents:
+        return ""
+    n = len(agents)
+    return f"{n} agent{'s' if n > 1 else ''} · " + ", ".join(a.get("desc", "") for a in agents)
+
+
 def clean_summary(text):
     line = (text or "").strip().splitlines()[0] if (text or "").strip() else ""
     line = line.strip().strip('"\'`').rstrip(".").strip()
@@ -501,7 +570,9 @@ def claude_pid_of(pid, ps=None):
 
 
 def notify_mac(title, msg):
-    """Post a macOS banner. Fire and forget."""
+    """Post a macOS banner, unless banners are muted. Fire and forget."""
+    if banners_muted():
+        return
     q = lambda t: t.replace("\\", "\\\\").replace('"', '\\"')
     subprocess.Popen(["osascript", "-e",
                       f'display notification "{q(msg)}" with title "{q(title)}"'],
@@ -592,8 +663,8 @@ def armed_by_tool(name, inp):
     inp = inp or {}
     if name not in ARMING_TOOLS:
         return None
-    if name == "Bash" and not inp.get("run_in_background"):
-        return None
+    if name in ("Bash", "Agent") and not inp.get("run_in_background"):
+        return None                     # it finished before Claude stopped
     if name == "ScheduleWakeup" and inp.get("stop"):
         return None
     return ARMING_TOOLS[name]

@@ -31,6 +31,8 @@ CARD_GAP = 8
 RADIUS = 16
 PILL_H = 20           # status pill height
 PILL_PAD = 9          # space either side of the status word inside its pill
+HOVER_MS = 450        # pause before the full-title tooltip appears
+MUTE_MIN = 60         # how long a click on the bell mutes banners
 STATUS_WORD = {"working": "working", "needs_input": "needs you", "permission": "permission",
                "idle": "idle", "watching": "watching"}
 STATE_FILE = os.path.join(w.WIDGET_DIR, "widget-state.json")
@@ -147,6 +149,11 @@ class Widget:
         self.c.bind("<Button-1>", self.on_click)
         self.c.bind("<B1-Motion>", self.drag_move)
         self.c.bind("<ButtonRelease-1>", self.on_release)
+        self.c.bind("<Motion>", self.on_motion)
+        self.c.bind("<Leave>", lambda e: self.hide_tip())
+        self.tip = None
+        self.tip_card = None
+        self.tip_job = None
 
         self.restore_pos()
         self.write_pid()
@@ -188,6 +195,10 @@ class Widget:
         if "close" in tags:
             self.hide()
             return
+        if "mute" in tags:
+            w.mute_banners(0 if w.banners_muted() else MUTE_MIN)
+            self.last_key = None            # redraw the header now
+            return
         for t in tags:
             if t.startswith("card:"):
                 self.clicked_card = t[5:]
@@ -195,6 +206,60 @@ class Widget:
         else:
             self.clicked_card = None
         self.drag = (e.x_root - self.root.winfo_x(), e.y_root - self.root.winfo_y(), e.x_root, e.y_root)
+
+    # ---- full title on hover ----
+    def on_motion(self, e):
+        card = next((t[5:] for t in self.c.gettags("current") if t.startswith("card:")), None)
+        if card == self.tip_card:
+            return
+        self.hide_tip()
+        self.tip_card = card
+        if card:
+            self.tip_job = self.root.after(HOVER_MS, lambda: self.show_tip(card))
+
+    def hide_tip(self):
+        if self.tip_job:
+            self.root.after_cancel(self.tip_job)
+            self.tip_job = None
+        if self.tip:
+            self.tip.destroy()
+            self.tip = None
+        self.tip_card = None
+
+    def show_tip(self, card):
+        self.tip_job = None
+        s = next((x for x in self.sessions if x["session_id"] == card), None)
+        if not s or self.drag:
+            return
+        th = self.theme()
+        lines = [w.display_label(s)]
+        chat = s.get("title") or s.get("tab_title")
+        if chat and chat != lines[0]:
+            lines.append(f"chat: {chat}")
+        folder = s.get("cwd_now") or s.get("cwd")
+        if folder:
+            lines.append(folder.replace(w.HOME, "~", 1))
+        for a in s.get("agents") or []:
+            lines.append(f"agent: {a.get('desc')}" + (" (background)" if a.get("bg") else ""))
+        tip = tk.Toplevel(self.root)
+        tip.overrideredirect(True)
+        tip.attributes("-topmost", True)
+        frame = tk.Frame(tip, bg=th["outline"], padx=1, pady=1)
+        frame.pack()
+        body = tk.Frame(frame, bg=th["bg"], padx=10, pady=7)
+        body.pack()
+        tk.Label(body, text=lines[0], bg=th["bg"], fg=th["fg"], font=self.f_label,
+                 justify="left", wraplength=420).pack(anchor="w")
+        for line in lines[1:]:
+            tk.Label(body, text=line, bg=th["bg"], fg=th["dim"], font=self.f_sub,
+                     justify="left", wraplength=420).pack(anchor="w")
+        tip.update_idletasks()
+        x = self.root.winfo_x() - tip.winfo_reqwidth() - 8
+        if x < 0:
+            x = self.root.winfo_x() + W_PX + 8
+        y = self.root.winfo_pointery() - tip.winfo_reqheight() // 2
+        tip.geometry(f"+{x}+{max(0, y)}")
+        self.tip = tip
 
     def drag_move(self, e):
         if self.drag:
@@ -265,9 +330,10 @@ class Widget:
             self.handle_attention(sessions)
             self.handle_empty(sessions)
             self.mode = w.effective_mode()
-            key = [self.mode] + [(s["session_id"], s.get("status"), s.get("armed"), w.display_label(s),
+            key = [self.mode, w.mute_until() > time.time() and int(w.mute_until() // 60)] + [(s["session_id"], s.get("status"), s.get("armed"), w.display_label(s),
                                   s.get("title"), s.get("task"), s.get("activity"), s.get("color"),
-                                  w.project_tag(s), w.elapsed_text(s)) for s in sessions]
+                                  w.project_tag(s), w.elapsed_text(s),
+                                  w.agents_text(s.get("agents"))) for s in sessions]
             if key != self.last_key:
                 self.last_key = key
                 self.redraw(sessions)
@@ -324,6 +390,7 @@ class Widget:
         return {k: "#" + v for k, v in w.PANEL_THEMES[self.mode].items()}
 
     def redraw(self, sessions):
+        self.hide_tip()
         c = self.c
         th = self.theme()
         c.delete("all")
@@ -341,6 +408,13 @@ class Widget:
         rounded(c, 0, 0, W_PX, height, RADIUS + 4, fill=th["bg"], outline=th["outline"], tags=("panel",))
         c.tag_lower("panel")
         c.create_text(PAD + 8, head_h / 2, text="claude", anchor="w", fill=th["dim"], font=self.f_title)
+        until = w.mute_until()
+        if until > time.time():
+            word, ink = "banners muted until " + time.strftime("%H:%M", time.localtime(until)), th["fg"]
+        else:
+            word, ink = "mute banners", th["dim"]
+        c.create_text(W_PX - PAD - 30, head_h / 2, text=word, anchor="e", fill=ink,
+                      font=self.f_time, tags=("mute",))
         c.create_text(W_PX - PAD - 8, head_h / 2, text="×", anchor="e", fill=th["dim"],
                       font=self.f_close, tags=("close",))
         self.place()
@@ -370,7 +444,8 @@ class Widget:
         text_x = x1 + 18
         text_w = (pill_x2 - self.pill_w - 12) - text_x
         lines = [self.fit(w.display_label(s), self.f_label, text_w)]   # always one line
-        h = CARD_H
+        agents = w.agents_text(s.get("agents"))
+        h = CARD_H + (LINE_H if agents else 0)
         card_fill = "#" + w.card_fill(color, th["bg"][1:], self.mode)
         glow = rounded(c, x1 - 2, y - 2, x2 + 2, y + h + 2, RADIUS + 2,
                        fill="", outline=vivid if attention else "", width=3, tags=(tag,))
@@ -382,6 +457,9 @@ class Widget:
                           fill=th["fg"] if attention else mix(th["fg"], th["dim"], 0.4), font=self.f_label, tags=(tag,))
             ty += LINE_H
         self.draw_subtitle(s, text_x, ty + 3, text_w, vivid, th, tag)
+        if agents:
+            c.create_text(text_x, ty + 3 + LINE_H, text=self.fit(agents, self.f_sub, text_w), anchor="w",
+                          fill=mix(th["fg"], th["dim"], 0.35), font=self.f_sub, tags=(tag,))
         self.draw_status(s, status, attention, pill_x2, y, h, vivid, card_fill, th, tag)
         if attention:
             self.pulse_items.append((glow, vivid, mix(vivid, card_fill, 0.7)))

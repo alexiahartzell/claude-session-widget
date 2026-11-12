@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import widgetlib as w
 
 LOG = os.path.join(w.WIDGET_DIR, "hooks.log")
-USAGE = "usage: /session-widget:widget [show | hide | quit | name <text> | summary on|off]"
+USAGE = "usage: /session-widget:widget [show | hide | quit | name <text> | summary on|off | mute [minutes] | unmute]"
 
 def armed_by(payload):
     """What a PostToolUse event leaves Claude waiting on, or None."""
@@ -80,12 +80,24 @@ def handle(payload, *, sessions_dir, tint_dir, pid, tty, notify, launch, summari
     elif event == "PostToolUse":
         what = armed_by(payload)
         cur = w.load_session(sessions_dir, sid) or {}
+        tool, inp = payload.get("tool_name"), payload.get("tool_input") or {}
+        if tool in w.AGENT_TOOLS and not inp.get("run_in_background") and cur.get("agents"):
+            fields["agents"] = w.agent_returned(cur["agents"], payload.get("tool_use_id"))
         if cur.get("status") == "permission":
-            fields = {"status": "working"}  # the tool ran, so the prompt was answered
-        elif not what:
-            return None
+            fields["status"] = "working"  # the tool ran, so the prompt was answered
         if what:
             fields["armed"] = what
+        if not fields:
+            return None
+    elif event == "SubagentStop":
+        log(f"SubagentStop fields: {sorted(payload)}")    # to learn what newer versions send
+        cur = w.load_session(sessions_dir, sid)
+        if not cur or not cur.get("agents"):
+            return None
+        _, new = w.update_session_fn(
+            sessions_dir, sid, lambda c: {"agents": w.agent_stopped(c.get("agents"), payload.get("agent_type"))},
+            touch=False)
+        return new
     elif event == "PreToolUse":
         cur = w.load_session(sessions_dir, sid)
         if cur is None:
@@ -93,11 +105,15 @@ def handle(payload, *, sessions_dir, tint_dir, pid, tty, notify, launch, summari
         fields = {"activity": w.activity_text(payload.get("tool_name"), payload.get("tool_input"))}
         if payload.get("cwd"):
             fields["cwd_now"] = payload["cwd"]
+        if payload.get("tool_name") in w.AGENT_TOOLS:
+            fields["agents"] = w.agent_started(w.prune_agents(cur.get("agents")),
+                                               payload.get("tool_use_id"), payload.get("tool_input"))
         if cur.get("status") == "watching":
             fields.update(status="working", armed=None)   # the watcher fired, Claude resumed
         elif cur.get("status") in ("permission", "needs_input", "idle"):
             fields.update(status="working")               # a new step means Claude is busy again
-        elif fields["activity"] == cur.get("activity") and fields.get("cwd_now") == cur.get("cwd_now"):
+        elif ("agents" not in fields and fields["activity"] == cur.get("activity")
+              and fields.get("cwd_now") == cur.get("cwd_now")):
             return None                      # same step again: skip the write
         else:
             # Only the activity line changes. touch=False keeps the card order steady.
@@ -106,6 +122,8 @@ def handle(payload, *, sessions_dir, tint_dir, pid, tty, notify, launch, summari
     elif event == "Stop":
         cur = w.load_session(sessions_dir, sid) or {}
         fields = {"status": "watching" if cur.get("armed") else "needs_input"}
+        if cur.get("agents"):              # foreground agents are done once Claude stops
+            fields["agents"] = [a for a in w.prune_agents(cur["agents"]) if a.get("bg")]
     elif event == "Notification":
         kind = payload.get("notification_type")
         if kind == "permission_prompt":
@@ -167,6 +185,16 @@ def cmd(args, *, sessions_dir, widget_dir, tty, pid=None):
         with open(os.path.join(widget_dir, "command"), "w") as f:
             f.write(word)
         return f"widget: {word}"
+    if word == "mute":
+        try:
+            minutes = int(rest[0]) if rest else 60
+        except ValueError:
+            return USAGE
+        w.mute_banners(minutes)
+        return f"widget: banners muted for {minutes} min" if minutes > 0 else "widget: banners on"
+    if word == "unmute":
+        w.mute_banners(0)
+        return "widget: banners on"
     if word == "summary" and rest[:1] in (["on"], ["off"]):
         w.set_summaries(rest[0] == "on")
         return f"widget: conversation summaries {rest[0]}"

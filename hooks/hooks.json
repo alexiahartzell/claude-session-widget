@@ -80,7 +80,17 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Monitor|ScheduleWakeup|CronCreate|Agent|Workflow|Bash",
+        "matcher": "Monitor|ScheduleWakeup|CronCreate|Agent|Task|Workflow|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/session-state.py\""
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
         "hooks": [
           {
             "type": "command",

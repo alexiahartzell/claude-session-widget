@@ -226,7 +226,7 @@ def test_post_tool_use_arms_only_for_background_tools(tmp_path):
                             "tool_input": {"cmd": "until-loop"}})
     assert new["armed"] == "a watcher"
     new, _ = run(tmp_path, {"hook_event_name": "PostToolUse", "session_id": "s1", "tool_name": "Agent",
-                            "tool_input": {"prompt": "go"}})
+                            "tool_input": {"prompt": "go", "run_in_background": True}})
     assert new["armed"] == "a subagent"
     new, _ = run(tmp_path, {"hook_event_name": "PostToolUse", "session_id": "s1", "tool_name": "ScheduleWakeup",
                             "tool_input": {"stop": True}})
@@ -315,3 +315,51 @@ def test_hooks_record_the_current_folder(tmp_path):
     new, _ = run(tmp_path, {"hook_event_name": "PreToolUse", "session_id": "s1", "cwd": "/x/proj/sub",
                             "tool_name": "Read", "tool_input": {"file_path": "/a/b.md"}})
     assert new["cwd_now"] == "/x/proj/sub" and new["cwd"] == "/x/proj"
+
+
+# ---- subagents ----
+
+def _agent(tmp_path, tid, desc, bg=False, kind="Explore"):
+    return run(tmp_path, {"hook_event_name": "PreToolUse", "session_id": "s1", "tool_name": "Agent",
+                          "tool_use_id": tid, "tool_input": {"description": desc, "subagent_type": kind,
+                                                             "run_in_background": bg}})
+
+
+def test_foreground_agent_listed_then_cleared_when_it_returns(tmp_path):
+    _armed_session(tmp_path)
+    new, _ = _agent(tmp_path, "t1", "Review the diff")
+    assert [a["desc"] for a in new["agents"]] == ["Review the diff"]
+    new, _ = run(tmp_path, {"hook_event_name": "PostToolUse", "session_id": "s1", "tool_name": "Agent",
+                            "tool_use_id": "t1", "tool_input": {"description": "Review the diff"}})
+    assert not new.get("agents") and "armed" not in new        # a finished foreground agent arms nothing
+
+
+def test_background_agents_stay_until_subagent_stop(tmp_path):
+    _armed_session(tmp_path)
+    _agent(tmp_path, "t1", "Search the docs", bg=True)
+    _agent(tmp_path, "t2", "Run the benchmarks", bg=True, kind="general-purpose")
+    new, _ = run(tmp_path, {"hook_event_name": "PostToolUse", "session_id": "s1", "tool_name": "Agent",
+                            "tool_use_id": "t1", "tool_input": {"description": "Search the docs", "run_in_background": True}})
+    assert len(new["agents"]) == 2 and new["armed"] == "a subagent"
+    new, _ = run(tmp_path, {"hook_event_name": "SubagentStop", "session_id": "s1", "agent_type": "general-purpose"})
+    assert [a["desc"] for a in new["agents"]] == ["Search the docs"]
+    new, _ = run(tmp_path, {"hook_event_name": "SubagentStop", "session_id": "s1"})
+    assert not new.get("agents")
+
+
+def test_stop_clears_foreground_agents_only(tmp_path):
+    _armed_session(tmp_path)
+    _agent(tmp_path, "t1", "Quick look")
+    _agent(tmp_path, "t2", "Long job", bg=True)
+    new, _ = run(tmp_path, {"hook_event_name": "Stop", "session_id": "s1"})
+    assert [a["desc"] for a in new["agents"]] == ["Long job"]
+
+
+def test_mute_command(tmp_path, monkeypatch):
+    monkeypatch.setattr(w, "WIDGET_CONFIG", str(tmp_path / "config.json"))
+    kw = dict(sessions_dir=str(tmp_path / "s"), widget_dir=str(tmp_path), tty=None)
+    assert ss.cmd(["mute", "20"], **kw) == "widget: banners muted for 20 min"
+    assert w.banners_muted()
+    assert ss.cmd(["unmute"], **kw) == "widget: banners on"
+    assert not w.banners_muted()
+    assert ss.cmd(["mute", "soon"], **kw).startswith("usage")

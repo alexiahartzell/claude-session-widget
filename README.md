@@ -37,6 +37,8 @@ Each card is one Claude Code session.
 - **The title** is a short summary, always on one line, of what the session is working on now, refreshed after each reply. Before the first summary, it is the name Claude Code gives the chat, or else the folder name.
 - **The second line** is where and what now. It starts with the project, in the card's colour: the git checkout the session is working in, or else its folder. While Claude works, it adds the step Claude is on, such as "Editing loader.py". While Claude watches a background job, it says what it is waiting on. When it is your turn, it shows only the project.
 - **The summary** in the title is written by a small model (Haiku, through your own `claude` command) from your last few prompts. Turn it off with `/widget summary off`.
+- **A third line appears while subagents run.** It counts them and lists what each one is doing. Background agents stay listed until they finish.
+- **Hover over a card** to see its full title, the chat's original name, the folder, and each running agent.
 - **The pill on the right** is the session's status. Under it is how long the session has been in that status, so you can see which one has waited longest.
 
 | Status | Meaning | Card |
@@ -48,6 +50,8 @@ Each card is one Claude Code session.
 | **idle** | Nothing is happening in this session. | Steady |
 
 Sessions that need you always sort to the top.
+
+**Mute banners for a while.** Click "mute banners" at the top of the panel to silence macOS banners for an hour, and click again to turn them back on. Cards still pulse. For another length, run `/widget mute 20`, or `/widget unmute`.
 
 **Statuses stay right even when a hook is missed.** Claude Code animates a symbol at the start of the Terminal tab title while it works, and shows ✳ while it waits. The panel reads the tab titles every second or two and corrects a card that disagrees, for example after you press Escape. It never hides a permission prompt.
 

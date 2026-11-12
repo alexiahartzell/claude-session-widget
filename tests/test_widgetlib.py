@@ -377,7 +377,7 @@ def test_armed_in_transcript_rearmed_after_notification(tmp_path):
         _user("run the calc"),
         _assistant(_tool("Bash", command="python3 calc.py", run_in_background=True)), _tool_result(),
         _user("<task-notification>done</task-notification>"),
-        _assistant(_tool("Agent", prompt="review")), _tool_result()))
+        _assistant(_tool("Agent", prompt="review", run_in_background=True)), _tool_result()))
     assert w.armed_in_transcript(str(f)) == "a subagent"
 
 
@@ -683,3 +683,48 @@ def test_project_follows_where_the_session_is_now():
     seen = []
     w.project_tag(s, name=lambda cwd: seen.append(cwd) or "widget")
     assert seen == ["/x/work/tools/widget"]
+
+
+# ---- subagent list ----
+
+def test_agents_text():
+    assert w.agents_text([]) == ""
+    assert w.agents_text([{"desc": "Review the diff"}]) == "1 agent · Review the diff"
+    assert w.agents_text([{"desc": "A"}, {"desc": "B"}]) == "2 agents · A, B"
+
+
+def test_prune_agents_drops_old_ones():
+    agents = [{"id": "a", "started": 0.0}, {"id": "b", "started": 9000.0}]
+    assert [a["id"] for a in w.prune_agents(agents, now=10000.0)] == ["b"]
+
+
+def test_agent_stopped_prefers_matching_type_then_foreground():
+    agents = [{"id": "1", "type": "Explore", "bg": True}, {"id": "2", "type": "Plan", "bg": False},
+              {"id": "3", "type": "Explore", "bg": False}]
+    assert [a["id"] for a in w.agent_stopped(agents, "Explore")] == ["2", "3"]
+    assert [a["id"] for a in w.agent_stopped(agents, None)] == ["1", "3"]
+
+
+# ---- muting banners ----
+
+def test_mute_and_unmute(tmp_path):
+    cfg = str(tmp_path / "config.json")
+    assert not w.banners_muted(path=cfg, now=100.0)
+    w.mute_banners(30, path=cfg, now=100.0)
+    assert w.banners_muted(path=cfg, now=100.0 + 29 * 60)
+    assert not w.banners_muted(path=cfg, now=100.0 + 31 * 60)
+    w.mute_banners(0, path=cfg, now=100.0)
+    assert not w.banners_muted(path=cfg, now=101.0)
+
+
+def test_notify_mac_stays_quiet_while_muted(monkeypatch, tmp_path):
+    cfg = str(tmp_path / "config.json")
+    monkeypatch.setattr(w, "WIDGET_CONFIG", cfg)
+    calls = []
+    monkeypatch.setattr(w.subprocess, "Popen", lambda *a, **k: calls.append(a))
+    w.mute_banners(10, path=cfg)
+    w.notify_mac("t", "m")
+    assert calls == []
+    w.mute_banners(0, path=cfg)
+    w.notify_mac("t", "m")
+    assert len(calls) == 1
