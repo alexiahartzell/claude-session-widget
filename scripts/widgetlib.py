@@ -491,25 +491,48 @@ def _hex(hue, sat, val):
     return "".join(f"{int(round(c * 255)):02x}" for c in colorsys.hsv_to_rgb(hue, sat, val))
 
 
+def _dark_of(h):
+    """Undo tint.py's light_of: the dark tab colour a light-mode tab colour came from,
+    so a scheme's character reads the same in both modes."""
+    import colorsys
+    hue, light, sat = colorsys.rgb_to_hls(*(int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)))
+    r, g, b = colorsys.hls_to_rgb(hue, min(1.0, max(0.0, (1 - light) / 0.55)), sat)
+    return "".join(f"{int(round(c * 255)):02x}" for c in (r, g, b))
+
+
+def _character(tint):
+    """(hue, saturation, value) of the dark version of a tab colour."""
+    return _hsv(_dark_of(tint) if is_light(tint) else tint)
+
+
 def card_fill(tint, panel_bg, mode="dark"):
-    """Card background for a tab tint, readable with the panel's text in this mode."""
-    hue, sat, _ = _hsv(tint)
+    """Card background for a tab tint, readable with the panel's text in this mode.
+    A richer tab colour gives a richer card, so schemes keep their character."""
     if mode == "light":
+        hue, sat, _ = _character(tint)
         if sat < 0.03:
             return _mix("e9e9ee", panel_bg, 0.3)
-        return _mix(_hex(hue, 0.16, 0.95), panel_bg, 0.2)
+        return _mix(_hex(hue, 0.05 + 0.28 * min(sat, 1.0), 0.96), panel_bg, 0.2)
     if is_light(tint):
         return _mix(brighten(tint), panel_bg, 0.78)
     return _mix(tint, panel_bg, 0.25)
 
 
 def accent(tint, mode="dark"):
-    """Outline and status colour for a card: vivid on dark, deeper on light."""
-    vivid = brighten(tint)
+    """Outline and status colour for a card. It keeps the tab colour's own
+    saturation and depth: quiet schemes get soft accents, bright ones vivid ones."""
+    hue, sat, val = _character(tint)
+    if sat < 0.03:
+        return "707070" if mode == "light" else brighten(tint)
+    s = min(1.0, max(0.2, 0.15 + 0.9 * sat))
     if mode == "light":
-        hue, sat, _ = _hsv(vivid)
-        return _hex(hue, max(sat, 0.6), 0.62) if sat >= 0.03 else "707070"
-    return vivid
+        v = min(0.68, max(0.42, 0.75 - 1.2 * (val - 0.1)))
+        out = _hex(hue, s, v)
+        while is_light(out) and v > 0.2:          # bright yellows need darkening to read
+            v -= 0.03
+            out = _hex(hue, s, v)
+        return out
+    return _hex(hue, s, min(1.0, max(0.62, 0.45 + 2.0 * val)))
 
 
 def _ps(pid, fields):

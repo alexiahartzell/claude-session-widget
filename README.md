@@ -119,7 +119,7 @@ There are fifteen colour schemes, and each comes in a dark and a light version. 
 <p align="center">
   <img src="docs/schemes.png" alt="A sheet of all fifteen colour schemes. Each scheme is a row of ten sample cards, shown twice: once on the dark panel and once on the light panel. The five original schemes come first, then the ten newer ones." width="100%">
 </p>
-<p align="center"><sub>Each scheme in its dark version, then its light version.</sub></p>
+<p align="center"><sub>Each scheme in its dark version, then its light version, with colours in rainbow order so schemes are easy to compare.</sub></p>
 
 ### Colour schemes
 
@@ -142,6 +142,8 @@ There are fifteen colour schemes, and each comes in a dark and a light version. 
 | **tropical** | 10 | Coral, mango, lime, lagoon and hibiscus. |
 
 **Every scheme has ten colours**, so ten tabs can be open before any colour repeats.
+
+**Schemes differ in strength as well as hue.** Cards and outlines keep each tab colour's own saturation and depth. So muted and nordic stay soft and greyish, while jewel, tropical and neon are vivid. A test checks that every pair of cards in every scheme stays clearly different in both light and dark mode.
 
 **The colourblind scheme was chosen by simulation.** Its colours were picked so that every pair of cards stays as different as possible under simulated protanopia, deuteranopia and tritanopia. A test in the suite checks this, so it stays true if the colours are ever edited.
 

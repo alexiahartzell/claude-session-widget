@@ -29,82 +29,79 @@ STATE_DIR = w.TINT_DIR
 DARK = {
     # Dark, quiet backgrounds.
     "muted": [
-        ("midnight", "0d1b2a"), ("plum", "1e1026"), ("forest", "0c1f16"), ("wine", "26101a"),
-        ("teal", "0c2224"), ("espresso", "211810"), ("indigo", "14132b"), ("moss", "1a200e"),
-        ("rust", "261410"), ("mulberry", "2a1428"),
+        ("midnight", "172128"), ("plum", "20132c"), ("forest", "11261b"), ("wine", "2b121b"), ("teal", "182e2c"),
+        ("espresso", "312b20"), ("indigo", "131624"), ("moss", "232713"), ("rust", "2b1814"), ("mulberry", "30202f"),
     ],
     # Deeper, more saturated colours that are easy to tell apart.
     "jewel": [
-        ("sapphire", "0d2547"), ("emerald", "0a2e22"), ("ruby", "3a0d1e"), ("amethyst", "1f0f3d"),
-        ("amber", "3a2805"), ("turquoise", "05302f"), ("jade", "12300a"), ("violet", "2d0a3a"),
-        ("copper", "3a1a05"), ("magenta", "3a0a2e"),
+        ("sapphire", "042242"), ("emerald", "073828"), ("ruby", "40060e"), ("amethyst", "0d0239"), ("amber", "3b370e"),
+        ("turquoise", "113c42"), ("jade", "083905"), ("violet", "370b39"), ("copper", "462c12"), ("magenta", "410f29"),
     ],
     # Twilight purples and roses, with sunset orange and amber.
     "dusk": [
-        ("twilight", "171a29"), ("orchid", "2a182a"), ("rosewood", "36151e"), ("lagoon", "182e3a"), ("heather", "292637"),
-        ("sunset", "291710"), ("mauve", "2c1f27"), ("amber", "292510"), ("aubergine", "1f0f29"), ("cerise", "360b28"),
+        ("twilight", "22273e"), ("orchid", "281d2f"), ("rosewood", "301316"), ("lagoon", "162831"), ("heather", "1b1736"),
+        ("sunset", "332019"), ("mauve", "33152a"), ("amber", "2d2614"), ("aubergine", "2c1331"), ("cerise", "3e232f"),
     ],
     # Sea blues and teals, with coral, sand, kelp and urchin.
     "ocean": [
-        ("abyss", "0e2342"), ("shallows", "0a3932"), ("coral", "351512"), ("kelp", "2c3a18"), ("deep", "13163f"),
-        ("sand", "352613"), ("urchin", "291532"), ("seaglass", "143823"), ("anemone", "301626"), ("reef", "0d3645"),
+        ("abyss", "14273c"), ("shallows", "08342e"), ("coral", "3c130b"), ("kelp", "212f07"), ("deep", "121633"),
+        ("sand", "362a09"), ("urchin", "22062d"), ("seaglass", "092e18"), ("anemone", "311126"), ("reef", "112b31"),
     ],
     # Ten hues picked by simulating protanopia, deuteranopia and tritanopia, so
     # every pair of card colours stays as different as ten colours allow for each.
     "colourblind": [
-        ("cinnabar", "402620"), ("copper", "402f20"), ("amber", "403720"), ("brass", "404020"),
-        ("jade", "20402b"), ("lagoon", "203740"), ("harbour", "202f40"), ("indigo", "222040"),
-        ("orchid", "402035"), ("raspberry", "402024"),
+        ("cinnabar", "460c19"), ("copper", "3f2816"), ("amber", "37350a"), ("brass", "2a3422"), ("jade", "173a29"),
+        ("lagoon", "222e39"), ("harbour", "26253a"), ("indigo", "23103f"), ("orchid", "4b0e36"), ("raspberry", "463b40"),
     ],
     # Pines, mosses, bark and mushrooms.
     "forest": [
-        ("pine", "0f3429"), ("fern", "153014"), ("moss", "2c4010"), ("bark", "352017"), ("lichen", "292814"),
-        ("spruce", "0d2729"), ("bramble", "291b22"), ("acorn", "2d200d"), ("canopy", "16291c"), ("mushroom", "381f1f"),
+        ("pine", "162922"), ("fern", "182b0e"), ("moss", "1e2615"), ("bark", "22110b"), ("lichen", "322e12"),
+        ("spruce", "162e2f"), ("bramble", "341b2b"), ("acorn", "231b12"), ("canopy", "0d2416"), ("mushroom", "271416"),
     ],
     # Fire reds, flame oranges, coal and smoke.
     "ember": [
-        ("ember", "45140e"), ("flame", "2c1a0a"), ("ash", "292624"), ("coal", "331720"), ("glow", "312a0c"),
-        ("cinder", "2d1013"), ("smoke", "3d3845"), ("brick", "361f17"), ("garnet", "3b1529"), ("sienna", "3b301a"),
+        ("ember", "370703"), ("flame", "381c05"), ("ash", "423906"), ("coal", "3a0d1d"), ("glow", "3c3f02"),
+        ("cinder", "380b12"), ("smoke", "240340"), ("brick", "471e13"), ("garnet", "40102d"), ("sienna", "3f2d0b"),
     ],
     # Northern-lights greens, glacier blues and violets.
     "aurora": [
-        ("borealis", "10361f"), ("glacier", "0f3840"), ("polar", "1b2544"), ("nebula", "211636"), ("solar", "290a1b"),
-        ("spectre", "21403a"), ("violet", "361036"), ("ice", "212e3b"), ("verdant", "0e2a0c"), ("magenta", "301017"),
+        ("borealis", "123922"), ("glacier", "0e333c"), ("polar", "0b1a3e"), ("nebula", "1a0834"), ("solar", "430d2b"),
+        ("spectre", "113632"), ("violet", "381039"), ("ice", "112336"), ("verdant", "073307"), ("magenta", "330e13"),
     ],
     # Sand, terracotta, sage and canyon reds.
     "desert": [
-        ("sand", "453a1b"), ("terracotta", "2f150c"), ("sage", "30412a"), ("clay", "2c2319"), ("mesa", "301a19"),
-        ("cactus", "172a1f"), ("dune", "43431e"), ("canyon", "2b1219"), ("oasis", "1d4245"), ("twilight", "3a3040"),
+        ("sand", "312e22"), ("terracotta", "351a19"), ("sage", "2c3b23"), ("clay", "3b2a1c"), ("mesa", "2e2021"),
+        ("cactus", "21372c"), ("dune", "373619"), ("canyon", "321921"), ("oasis", "1b2e2d"), ("twilight", "251c2c"),
     ],
     # Plums, raspberries, blueberries and cherries.
     "berry": [
-        ("plum", "451c44"), ("raspberry", "300d15"), ("blackberry", "151029"), ("currant", "451613"), ("blueberry", "0e182a"),
-        ("cherry", "3a2016"), ("grape", "2a1a32"), ("elderberry", "3b1c33"), ("cranberry", "3a1626"), ("bilberry", "141629"),
+        ("plum", "2f092f"), ("raspberry", "3c151b"), ("blackberry", "140c39"), ("currant", "2d0b0a"), ("blueberry", "152437"),
+        ("cherry", "2e1912"), ("grape", "2d173d"), ("elderberry", "34152d"), ("cranberry", "2f0d1d"), ("bilberry", "161c3d"),
     ],
     # Fjord blues, frost, pine and birch.
     "nordic": [
-        ("fjord", "1b2b3b"), ("slate", "20232d"), ("frost", "2d4045"), ("pine", "1f3228"), ("granite", "413a33"),
-        ("aurora", "112e2b"), ("heather", "382d3b"), ("birch", "363429"), ("tundra", "313b29"), ("steel", "2a2740"),
+        ("fjord", "273540"), ("slate", "202330"), ("frost", "2b3335"), ("pine", "274033"), ("granite", "362d28"),
+        ("aurora", "1d302d"), ("heather", "392d3b"), ("birch", "38382f"), ("tundra", "2a3422"), ("steel", "29253d"),
     ],
     # Rust, ochre, olive, maroon and pumpkin.
     "autumn": [
-        ("rust", "31150d"), ("ochre", "29220d"), ("olive", "3c451b"), ("maroon", "3c0c19"), ("pumpkin", "402210"),
-        ("chestnut", "371817"), ("harvest", "3a381d"), ("cider", "41321c"), ("hazel", "2c3921"), ("plum", "2e1e28"),
+        ("rust", "2e0909"), ("ochre", "372c15"), ("olive", "232c09"), ("maroon", "341220"), ("pumpkin", "341b12"),
+        ("chestnut", "2d1013"), ("harvest", "2f2c08"), ("cider", "281908"), ("hazel", "15280b"), ("plum", "2d102b"),
     ],
     # Bright, saturated electric colours. The easiest to tell apart.
     "neon": [
-        ("cyber", "072230"), ("laser", "41032b"), ("volt", "253d09"), ("ultra", "1a032a"), ("blaze", "351705"),
-        ("acid", "2b2406"), ("electric", "07143a"), ("toxic", "08331c"), ("hot", "3f050d"), ("radium", "06322f"),
+        ("cyber", "002c41"), ("laser", "46063f"), ("volt", "2a4200"), ("ultra", "190041"), ("blaze", "431600"),
+        ("acid", "433400"), ("electric", "09204f"), ("toxic", "004c28"), ("hot", "4f0921"), ("radium", "004341"),
     ],
     # Deep space blues, nebula pinks and violets.
     "galaxy": [
-        ("void", "121b35"), ("nebula", "411538"), ("comet", "1a393f"), ("quasar", "1a0829"), ("stardust", "2e1722"),
-        ("orion", "1b3043"), ("pulsar", "173a30"), ("supernova", "41101c"), ("cosmos", "25233a"), ("zenith", "2b1c2d"),
+        ("void", "141e36"), ("nebula", "2a1426"), ("comet", "183737"), ("quasar", "150b2c"), ("stardust", "330e1d"),
+        ("orion", "12242e"), ("pulsar", "0c3324"), ("supernova", "290a0a"), ("cosmos", "1e152c"), ("zenith", "260928"),
     ],
     # Coral, mango, lime, lagoon and hibiscus.
     "tropical": [
-        ("coral", "3a1215"), ("mango", "352a09"), ("lime", "283410"), ("lagoon", "143b44"), ("hibiscus", "360823"),
-        ("palm", "143c1f"), ("lapis", "0a1f43"), ("orchid", "281530"), ("papaya", "3a1b09"), ("reef", "0b362c"),
+        ("coral", "46070d"), ("mango", "3f3305"), ("lime", "2b3a02"), ("lagoon", "06303a"), ("hibiscus", "400526"),
+        ("palm", "04411c"), ("lapis", "04143a"), ("orchid", "3a0f43"), ("papaya", "371e06"), ("reef", "083832"),
     ],
 }
 PALETTE_SIZE = 10                                # every scheme has this many colours
