@@ -434,7 +434,7 @@ CONFIG_PATH = os.path.join(TINT_DIR, "scheme.json")
 SCHEME_NAMES = ("muted", "jewel", "dusk", "ocean", "colourblind",
                 "forest", "ember", "aurora", "desert", "berry",
                 "nordic", "autumn", "neon", "galaxy", "tropical",
-                "dracula", "crewtractor")
+                "green", "dracula", "crewtractor")
 MODES = ("auto", "dark", "light")
 
 # Panel colours per mode: background, outline, text, secondary text.
@@ -894,3 +894,180 @@ def mirror_claude_sessions(claude_dir, sessions_dir, tint_dir=TINT_DIR,
             if status == "needs_input" and was != "needs_input":
                 newly_attention.append(new)
     return newly_attention
+
+
+# ---- the pet: a tiny pixel creature on each card that acts out the status ----
+# A round sprout with a leaf on top. Each frame is a grid of "b" body, "e" eye
+# and "m" a mark beside it (z, !, ?). Frames alternate on a timer.
+
+PET_W, PET_H = 12, 11
+_LEAF = {"right": [(6, 0), (7, 0), (6, 1)], "left": [(5, 0), (4, 0), (6, 1)],
+         "droop": [(4, 1), (5, 1), (6, 1)]}
+
+
+def _pet(top=2, eyes="open", look=0, leaf="right", feet=(3, 8), arm=None, mark=None):
+    px = {}
+    for col, row in _LEAF[leaf]:
+        px[(col, row + top - 2)] = "b"
+    spans = [(4, 7), (2, 9), (1, 10), (1, 10), (1, 10), (1, 10), (2, 9)]
+    for r, (a, b) in enumerate(spans):
+        for col in range(a, b + 1):
+            px[(col, top + r)] = "b"
+    if eyes == "open":
+        for col in (4 + look, 7 + look):
+            px[(col, top + 3)] = px[(col, top + 4)] = "e"
+    else:
+        for col in (3, 4, 7, 8):
+            px[(col, top + 4)] = "e"
+    for col in feet:
+        px[(col, top + 7)] = "b"
+    for cell in arm or ():
+        px[cell] = "b"
+    if mark:
+        px[mark] = "m"
+    return ["".join(px.get((c, r), ".") for c in range(PET_W)) for r in range(PET_H)]
+
+
+PET_FRAMES = {
+    # asleep: leaf drooped, eyes shut, breathing, a z drifting up
+    "idle": [_pet(top=3, eyes="shut", leaf="droop", feet=(), mark=(10, 1)),
+             _pet(top=4, eyes="shut", leaf="droop", feet=(), mark=(11, 0))],
+    # scurrying: bobbing, leaf swaying, feet swapping, eyes ahead
+    "working": [_pet(top=2, look=1, leaf="right", feet=(3, 7)),
+                _pet(top=3, look=1, leaf="left", feet=(4, 8))],
+    # sitting and watching, eyes glancing side to side
+    "watching": [_pet(top=3, look=-1, leaf="right"), _pet(top=3, look=1, leaf="right")],
+    # waving at you with a mark overhead
+    "needs_input": [_pet(top=3, arm=[(11, 3), (11, 4), (11, 5)], mark=(10, 0)),
+                    _pet(top=3, arm=[(11, 6), (11, 7)], mark=(10, 1))],
+}
+PET_FRAMES["permission"] = PET_FRAMES["needs_input"]
+PET_MARK = {"idle": "z", "needs_input": "!", "permission": "?"}
+
+
+def pet_pixels(status, frame):
+    """[(col, row, kind)] for one animation frame of a status, kind in b/e/m."""
+    frames = PET_FRAMES.get(status) or PET_FRAMES["idle"]
+    grid = frames[frame % len(frames)]
+    return [(c, r, ch) for r, row in enumerate(grid) for c, ch in enumerate(row) if ch != "."]
+
+
+def pet_enabled(path=None):
+    return _config(path).get("pet", True)
+
+
+def set_pet(on, path=None):
+    _save_config_field(path, pet=bool(on))
+
+
+# ---- daily stats, shown when you hover the panel header ----
+# Hooks count prompts; the widget adds the time each session spends working.
+
+STATS_PATH = os.path.join(WIDGET_DIR, "stats.json")
+STATS_KEEP_DAYS = 14
+
+
+def today(now=None):
+    return time.strftime("%Y-%m-%d", time.localtime(time.time() if now is None else now))
+
+
+def _update_stats(fn, path=None, now=None):
+    """Locked read-modify-write of today's stats. fn(day) changes day in place."""
+    path = path or STATS_PATH
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path + ".lock", "a+") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        data = _read_json(path) or {}
+        key = today(now)
+        day = data.setdefault(key, {})
+        fn(day)
+        for old in sorted(data)[:-STATS_KEEP_DAYS]:
+            del data[old]
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".stats-")
+        with os.fdopen(fd, "w") as f:
+            json.dump(data, f)
+        os.replace(tmp, path)
+    return day
+
+
+def _by(day, sid):
+    return day.setdefault("by_session", {}).setdefault(sid, {})
+
+
+def record_prompt(sid, prompt, path=None, now=None):
+    """Count a prompt you sent. Task notifications are Claude's own wake-ups, not yours."""
+    text = (prompt or "").lstrip()
+    if not sid or not text or text.startswith("<task-notification>"):
+        return None
+
+    def fn(day):
+        day["prompts"] = day.get("prompts", 0) + 1
+        b = _by(day, sid)
+        b["prompts"] = b.get("prompts", 0) + 1
+    return _update_stats(fn, path, now)
+
+
+def add_work(seconds, longest, path=None, now=None):
+    """Add working seconds per session, and keep the longest unbroken stretch."""
+    if not seconds and not longest:
+        return None
+
+    def fn(day):
+        for sid, secs in seconds.items():
+            day["work_s"] = day.get("work_s", 0) + secs
+            b = _by(day, sid)
+            b["work_s"] = b.get("work_s", 0) + secs
+        for sid, secs in longest.items():
+            if secs > day.get("longest_s", 0):
+                day["longest_s"], day["longest_sid"] = secs, sid
+    return _update_stats(fn, path, now)
+
+
+def today_stats(path=None, now=None):
+    return (_read_json(path or STATS_PATH) or {}).get(today(now), {})
+
+
+def duration_text(secs):
+    mins = int((secs or 0) // 60)
+    if mins < 1:
+        return "under a minute"
+    if mins < 60:
+        return f"{mins} min"
+    h, m = divmod(mins, 60)
+    return f"{h} h {m} min" if m else f"{h} h"
+
+
+def _plural(n, word):
+    return f"{n} {word}" + ("" if n == 1 else "s")
+
+
+def stats_lines(day, labels=None):
+    """Lines for the header tooltip. labels maps session id to a card name."""
+    labels = labels or {}
+    by = day.get("by_session") or {}
+    if not day.get("prompts") and not day.get("work_s"):
+        return ["today", "nothing yet, a fresh start"]
+    active = [s for s, b in by.items() if b.get("prompts") or b.get("work_s")]
+    lines = ["today",
+             f"{_plural(day.get('prompts', 0), 'prompt')} across {_plural(len(active), 'session')}",
+             f"Claude worked {duration_text(day.get('work_s', 0))}"]
+    if day.get("longest_s", 0) >= 60:
+        who = labels.get(day.get("longest_sid"))
+        lines.append(f"longest stretch {duration_text(day['longest_s'])}" + (f" on {who}" if who else ""))
+    busiest = max(by, key=lambda s: by[s].get("work_s", 0), default=None)
+    if busiest and labels.get(busiest) and len(active) > 1 and by[busiest].get("work_s", 0) >= 60:
+        lines.append(f"busiest: {labels[busiest]}")
+    return lines
+
+
+def session_stats_line(day, sid):
+    """One line for a card's tooltip: this session's share of today."""
+    b = (day.get("by_session") or {}).get(sid) or {}
+    if not b:
+        return None
+    parts = []
+    if b.get("prompts"):
+        parts.append(_plural(b["prompts"], "prompt"))
+    if b.get("work_s", 0) >= 60:
+        parts.append(f"worked {duration_text(b['work_s'])}")
+    return "today: " + ", ".join(parts) if parts else None

@@ -821,3 +821,96 @@ def test_hover_card_schedules_the_tip_once_per_card():
     assert calls == [widget.HOVER_MS] and fake.tip_card == "a"
     hover(None)                                  # moved off: timer cancelled
     assert calls[-1] == "cancel" and fake.tip_card is None
+
+
+# ---- the pet ----
+
+def test_every_pet_status_has_two_frames_of_the_same_size():
+    for status, frames in w.PET_FRAMES.items():
+        assert len(frames) == 2, status
+        assert frames[0] != frames[1], status                 # it actually moves
+        for f in frames:
+            assert len(f) == w.PET_H and all(len(r) == w.PET_W for r in f), status
+            assert sum(r.count("e") for r in f) >= 2, status      # it has eyes
+
+
+def test_pet_pixels_wraps_frames_and_falls_back_to_idle():
+    assert w.pet_pixels("working", 0) == w.pet_pixels("working", 2)
+    assert w.pet_pixels("mystery", 0) == w.pet_pixels("idle", 0)
+    assert {k for _, _, k in w.pet_pixels("needs_input", 0)} == {"b", "e", "m"}
+
+
+def test_pet_setting_defaults_on_and_saves(tmp_path):
+    cfg = str(tmp_path / "config.json")
+    assert w.pet_enabled(cfg) is True
+    w.set_pet(False, cfg)
+    assert w.pet_enabled(cfg) is False
+
+
+# ---- daily stats ----
+
+def test_prompts_and_work_add_up_for_today(tmp_path):
+    p, t = str(tmp_path / "stats.json"), 1_800_000_000
+    w.record_prompt("a", "fix the plot", p, now=t)
+    w.record_prompt("a", "and the axis", p, now=t)
+    w.record_prompt("b", "hello", p, now=t)
+    w.record_prompt("a", "<task-notification>done</task-notification>", p, now=t)   # not yours
+    w.record_prompt("a", "   ", p, now=t)
+    w.add_work({"a": 600, "b": 120}, {"a": 400}, p, now=t)
+    w.add_work({"a": 1200}, {"a": 900, "b": 100}, p, now=t)
+    day = w.today_stats(p, now=t)
+    assert day["prompts"] == 3 and day["work_s"] == 1920
+    assert day["by_session"]["a"] == {"prompts": 2, "work_s": 1800}
+    assert day["longest_s"] == 900 and day["longest_sid"] == "a"
+    assert w.today_stats(p, now=t + 86400) == {}                 # a new day starts empty
+
+
+def test_stats_keep_two_weeks(tmp_path):
+    p = str(tmp_path / "stats.json")
+    for d in range(20):
+        w.record_prompt("a", "hi", p, now=1_800_000_000 + d * 86400)
+    assert len(w._read_json(p)) == w.STATS_KEEP_DAYS
+
+
+def test_stats_lines_read_naturally():
+    assert w.stats_lines({}) == ["today", "nothing yet, a fresh start"]
+    day = {"prompts": 14, "work_s": 7800, "longest_s": 1500, "longest_sid": "a",
+           "by_session": {"a": {"prompts": 9, "work_s": 6000}, "b": {"prompts": 5, "work_s": 1800}}}
+    assert w.stats_lines(day, {"a": "Fitting spectra", "b": "Notes"}) == [
+        "today", "14 prompts across 2 sessions", "Claude worked 2 h 10 min",
+        "longest stretch 25 min on Fitting spectra", "busiest: Fitting spectra"]
+    one = {"prompts": 1, "work_s": 30, "by_session": {"a": {"prompts": 1, "work_s": 30}}}
+    assert w.stats_lines(one) == ["today", "1 prompt across 1 session", "Claude worked under a minute"]
+
+
+def test_session_stats_line():
+    day = {"by_session": {"a": {"prompts": 3, "work_s": 2400}, "b": {"prompts": 1, "work_s": 20}}}
+    assert w.session_stats_line(day, "a") == "today: 3 prompts, worked 40 min"
+    assert w.session_stats_line(day, "b") == "today: 1 prompt"
+    assert w.session_stats_line(day, "c") is None
+
+
+def test_card_at_returns_stats_over_the_header():
+    fake, _ = _hover_widget({1: ((0, 0, 220, 34), ("stats",)), 2: ((10, 40, 370, 100), ("card:a",))})
+    assert fake.card_at(50, 10) == "stats"
+    assert fake.card_at(300, 10) is None                       # the mute and close corner
+    assert fake.card_at(50, 60) == "a"
+
+
+def test_count_work_adds_time_for_working_sessions(monkeypatch):
+    import types, widget
+    saved = []
+    monkeypatch.setattr(w, "add_work", lambda s, l: saved.append((s, l)))
+    clock = [1000.0]
+    monkeypatch.setattr(widget.time, "time", lambda: clock[0])
+    fake = types.SimpleNamespace(work_s={}, work_longest={}, work_t=1000.0, work_flushed=1000.0)
+    fake.flush_work = types.MethodType(widget.Widget.flush_work, fake)
+    count = types.MethodType(widget.Widget.count_work, fake)
+    sessions = [{"session_id": "a", "status": "working", "status_since": 900},
+                {"session_id": "b", "status": "needs_input", "status_since": 950}]
+    clock[0] = 1002.0
+    count(sessions)
+    clock[0] = 1600.0                                        # the Mac slept: count at most 5 s
+    count(sessions)
+    assert saved == [({"a": 7.0}, {"a": 700})]               # flushed after 30 s
+    assert fake.work_s == {}

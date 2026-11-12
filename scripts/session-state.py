@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import widgetlib as w
 
 LOG = os.path.join(w.WIDGET_DIR, "hooks.log")
-USAGE = "usage: /session-widget:widget [show | hide | quit | name <text> | summary on|off | mute [minutes] | unmute]"
+USAGE = "usage: /session-widget:widget [show | hide | quit | name <text> | summary on|off | pet on|off | mute [minutes] | unmute]"
 
 def armed_by(payload):
     """What a PostToolUse event leaves Claude waiting on, or None."""
@@ -72,6 +72,10 @@ def handle(payload, *, sessions_dir, tint_dir, pid, tty, notify, launch, summari
         if payload.get("source", "startup") == "startup" or not existing:
             fields.update(status="idle", task="")
     elif event == "UserPromptSubmit":
+        try:
+            w.record_prompt(sid, payload.get("prompt", ""), path=os.path.join(os.path.dirname(sessions_dir), "stats.json"))
+        except Exception as e:
+            log(f"stats: {e!r}")
         cur = w.load_session(sessions_dir, sid) or {}
         fields = {"status": "working", "task": w.truncate_task(payload.get("prompt", "")),
                   "armed": None, "activity": None,
@@ -204,6 +208,9 @@ def cmd(args, *, sessions_dir, widget_dir, tty, pid=None):
     if word == "unmute":
         w.mute_banners(0)
         return "widget: banners on"
+    if word == "pet" and rest[:1] in (["on"], ["off"]):
+        w.set_pet(rest[0] == "on")
+        return f"widget: pets {rest[0]}"
     if word == "summary" and rest[:1] in (["on"], ["off"]):
         w.set_summaries(rest[0] == "on")
         return f"widget: conversation summaries {rest[0]}"
