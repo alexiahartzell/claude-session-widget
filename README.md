@@ -55,7 +55,7 @@ Sessions that need you always sort to the top.
 
 **Updates take effect on their own.** After `claude plugin update`, the panel notices the new version within half a minute and restarts onto it.
 
-**Statuses stay right even when a hook is missed.** Claude Code animates a symbol at the start of the Terminal tab title while it works, and shows ✳ while it waits. The panel reads the tab titles every second or two and corrects a card that disagrees, for example after you press Escape. It never hides a permission prompt.
+**Statuses stay right even when a hook is missed.** Claude Code animates a symbol at the start of the Terminal tab title while it works, and shows a star while it waits. The panel reads the tab titles every second or two and corrects a card that disagrees, for example after you press Escape. It never hides a permission prompt.
 
 ---
 
@@ -217,15 +217,15 @@ Run these inside any Claude Code session:
 There are four small Python programs and no background service.
 
 ```text
- Claude Code session ──hook events──▶ tint.py ──colours──▶ the Terminal tab
-                     ──hook events──▶ session-state.py ──writes──▶ ~/.claude/widget/sessions/<id>.json
-                                            │                                    │
-                                after a reply ▼                                  │
-                                      summarise.py ──summary──▶ (same file)      │
-                                                                                 │
-     macOS banner ◀── widget.py (the panel) ◀──reads twice a second ─────────────┘
-                          │
-                          └──reads every tab title──▶ Terminal
+ Claude Code session --hook events--> tint.py --colours--> the Terminal tab
+                     --hook events--> session-state.py --writes--> ~/.claude/widget/sessions/<id>.json
+                                            |                                    |
+                                after a reply v                                  |
+                                      summarise.py --summary--> (same file)      |
+                                                                                 |
+     macOS banner <-- widget.py (the panel) <--reads twice a second -------------+
+                          |
+                          +--reads every tab title--> Terminal
 ```
 
 1. **When a session starts, `tint.py` colours its Terminal tab**, and puts the original colours back when it ends.
@@ -234,7 +234,7 @@ There are four small Python programs and no background service.
 4. **`widget.py` reads those files twice a second** and redraws the panel when anything changes.
 5. **When a session starts needing you**, the panel posts a macOS banner and reappears if it was hidden.
 6. **After each reply, `summarise.py` writes the card's summary** in the background. It sends your last few prompts to Haiku through your own `claude` command, with hooks turned off so it never triggers itself.
-7. **Every second or two, the panel reads each Terminal tab's title.** Claude Code shows a spinner there while it works and ✳ while it waits, so the panel can correct a card whose hook was missed.
+7. **Every second or two, the panel reads each Terminal tab's title.** Claude Code shows a spinner there while it works and a star while it waits, so the panel can correct a card whose hook was missed.
 
 A few details:
 
@@ -305,13 +305,13 @@ cat ~/.claude/widget/hooks.log    # the hook script
 **Clicking a card does nothing.**
 
 - Click-to-jump only works in Apple's Terminal app.
-- Allow Python to control Terminal under **System Settings → Privacy & Security → Automation**.
+- Allow Python to control Terminal under **System Settings > Privacy & Security > Automation**.
 
 **Tabs are not coloured.**
 
 - Colours only apply in Apple's Terminal app.
 - Check that `CLAUDE_WIDGET_TINT` is not set to `off`.
-- Allow Python to control Terminal under **System Settings → Privacy & Security → Automation**.
+- Allow Python to control Terminal under **System Settings > Privacy & Security > Automation**.
 
 **The commands print nothing, or say AppleScript is blocked.**
 
@@ -326,7 +326,7 @@ python3 ~/.claude/plugins/cache/session-widget/session-widget/*/scripts/tint.py 
 
 **No banners appear.**
 
-- The banners come from AppleScript, so macOS usually lists them under **Script Editor**. Allow them in **System Settings → Notifications → Script Editor**.
+- The banners come from AppleScript, so macOS usually lists them under **Script Editor**. Allow them in **System Settings > Notifications > Script Editor**.
 - Focus modes and Do Not Disturb hide them too.
 
 **A card says "working" while Claude is waiting.**
