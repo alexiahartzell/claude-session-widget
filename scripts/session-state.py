@@ -120,9 +120,12 @@ def handle(payload, *, sessions_dir, tint_dir, pid, tty, notify, launch, summari
             _, new = w.update_session_fn(sessions_dir, sid, lambda c: fields, touch=False)
             return new
     elif event == "Stop":
-        log(f"Stop fields: {sorted(payload)}")    # to learn whether Stop carries background_tasks
         cur = w.load_session(sessions_dir, sid) or {}
-        fields = {"status": "watching" if cur.get("armed") else "needs_input"}
+        known, waiting = w.waiting_from_stop(payload)
+        if known:          # the payload lists background work from every turn
+            fields = {"status": "watching" if waiting else "needs_input", "armed": waiting}
+        else:              # older Claude Code: fall back to what this turn armed
+            fields = {"status": "watching" if cur.get("armed") else "needs_input"}
         if cur.get("agents"):              # foreground agents are done once Claude stops
             fields["agents"] = [a for a in w.prune_agents(cur["agents"]) if a.get("bg")]
     elif event == "Notification":

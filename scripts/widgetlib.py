@@ -715,6 +715,29 @@ def armed_by_tool(name, inp):
     return ARMING_TOOLS[name]
 
 
+# Stop payloads list in-flight background work and scheduled wakeups. That
+# covers work from earlier turns too, which "armed" (this turn only) misses.
+TASK_TYPES = {"shell": ("a background job", "background jobs"), "subagent": ("a subagent", "subagents"),
+              "monitor": ("a watcher", "watchers"), "workflow": ("a workflow", "workflows")}
+
+
+def waiting_from_stop(payload):
+    """(known, label). known is False when the payload has no background lists
+    (older Claude Code). label names what Claude waits on, or is None."""
+    if "background_tasks" not in payload and "session_crons" not in payload:
+        return False, None
+    tasks = [t for t in payload.get("background_tasks") or [] if isinstance(t, dict)]
+    crons = payload.get("session_crons") or []
+    if tasks:
+        kinds = {t.get("type") for t in tasks}
+        one, many = (TASK_TYPES.get(kinds.pop(), ("background work", "background tasks"))
+                     if len(kinds) == 1 else ("background work", "background tasks"))
+        return True, one if len(tasks) == 1 else f"{len(tasks)} {many}"
+    if crons:
+        return True, "a timer"
+    return True, None
+
+
 def find_transcript(session_id, projects_dir=CLAUDE_PROJECTS_DIR):
     import glob
     hits = glob.glob(os.path.join(projects_dir, "*", session_id + ".jsonl"))

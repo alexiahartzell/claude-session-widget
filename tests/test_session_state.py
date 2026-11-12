@@ -381,3 +381,44 @@ def test_mute_command(tmp_path, monkeypatch):
     assert ss.cmd(["unmute"], **kw) == "widget: banners on"
     assert not w.banners_muted()
     assert ss.cmd(["mute", "soon"], **kw).startswith("usage")
+
+
+# ---- Stop payloads list background work from every turn (issue 5) ----
+
+def _bg(type_="shell", **kw):
+    return dict({"id": "b1", "type": type_, "status": "running", "description": "wait on cluster"}, **kw)
+
+
+def test_stop_watches_background_job_from_an_earlier_turn(tmp_path):
+    _armed_session(tmp_path)
+    run(tmp_path, {"hook_event_name": "PostToolUse", "session_id": "s1", "tool_name": "Bash",
+                   "tool_input": {"command": "squeue-wait", "run_in_background": True}})
+    run(tmp_path, {"hook_event_name": "Stop", "session_id": "s1", "background_tasks": [_bg()], "session_crons": []})
+    new, _ = run(tmp_path, {"hook_event_name": "UserPromptSubmit", "session_id": "s1", "prompt": "something else"})
+    assert "armed" not in new
+    new, calls = run(tmp_path, {"hook_event_name": "Stop", "session_id": "s1",
+                                "background_tasks": [_bg()], "session_crons": []})
+    assert new["status"] == "watching" and new["armed"] == "a background job" and calls == []
+
+
+def test_stop_with_empty_lists_needs_you_even_if_armed(tmp_path):
+    _armed_session(tmp_path)
+    run(tmp_path, {"hook_event_name": "PostToolUse", "session_id": "s1", "tool_name": "Bash",
+                   "tool_input": {"command": "sleep 1", "run_in_background": True}})
+    new, calls = run(tmp_path, {"hook_event_name": "Stop", "session_id": "s1",
+                                "background_tasks": [], "session_crons": []})
+    assert new["status"] == "needs_input" and "armed" not in new and len(calls) == 1
+
+
+def test_stop_watches_a_scheduled_wakeup(tmp_path):
+    _armed_session(tmp_path)
+    new, _ = run(tmp_path, {"hook_event_name": "Stop", "session_id": "s1", "background_tasks": [],
+                            "session_crons": [{"id": "c1", "schedule": "5 * * * *", "recurring": False, "prompt": "go"}]})
+    assert new["status"] == "watching" and new["armed"] == "a timer"
+
+
+def test_stop_without_lists_falls_back_to_armed(tmp_path):
+    _armed_session(tmp_path)
+    run(tmp_path, {"hook_event_name": "PostToolUse", "session_id": "s1", "tool_name": "Monitor", "tool_input": {}})
+    new, _ = run(tmp_path, {"hook_event_name": "Stop", "session_id": "s1"})
+    assert new["status"] == "watching" and new["armed"] == "a watcher"
