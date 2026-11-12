@@ -120,3 +120,21 @@ def test_colourblind_cards_stay_distinct_for_every_colour_vision_type():
         closest = min(sum((p - q) ** 2 for p, q in zip(a, b)) ** 0.5
                       for a, b in itertools.combinations(labs, 2))
         assert closest > 9, name
+
+
+def test_newer_schemes_keep_every_card_distinct_in_both_modes():
+    """Light-mode cards differ only by hue, so a scheme's hues must stay spread out.
+    dusk and ocean predate this check and are allowed to be closer."""
+    identity = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+    for scheme in tint.DARK:
+        if scheme in ("dusk", "ocean"):
+            continue
+        for mode in ("dark", "light"):
+            labs = [_lab(w.accent(h, mode), identity) for _, h in tint.palette(scheme, mode)]
+            closest = min(sum((p - q) ** 2 for p, q in zip(a, b)) ** 0.5
+                          for a, b in itertools.combinations(labs, 2))
+            assert closest > 10, (scheme, mode, closest)
+
+
+def test_every_scheme_is_selectable():
+    assert set(tint.DARK) == set(w.SCHEME_NAMES)

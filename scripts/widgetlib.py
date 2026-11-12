@@ -428,7 +428,9 @@ def is_light(h):
 # ---- colour scheme and light/dark mode, shared with tint.py ----
 
 CONFIG_PATH = os.path.join(TINT_DIR, "scheme.json")
-SCHEME_NAMES = ("muted", "jewel", "dusk", "ocean", "colourblind")
+SCHEME_NAMES = ("muted", "jewel", "dusk", "ocean", "colourblind",
+                "forest", "ember", "aurora", "desert", "berry",
+                "nordic", "autumn", "neon", "galaxy", "tropical")
 MODES = ("auto", "dark", "light")
 
 # Panel colours per mode: background, outline, text, secondary text.

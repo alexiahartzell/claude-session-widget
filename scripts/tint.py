@@ -12,7 +12,8 @@ Manual use (the /tint command):
   tint.py reset        restore this tab's original colours
   tint.py list         show the current colours and which tab has what
   tint.py all          tint every tab that has a running claude
-  tint.py scheme NAME  switch scheme: muted, jewel, dusk, ocean, colourblind
+  tint.py scheme NAME  switch scheme: muted, jewel, dusk, ocean, colourblind, forest,
+                       ember, aurora, desert, berry, nordic, autumn, neon, galaxy, tropical
   tint.py mode MODE    switch mode: auto (follow macOS), dark, light
 Only acts inside Apple Terminal.
 """
@@ -56,6 +57,56 @@ DARK = {
         ("cinnabar", "402620"), ("copper", "402f20"), ("amber", "403720"), ("brass", "404020"),
         ("jade", "20402b"), ("lagoon", "203740"), ("harbour", "202f40"), ("indigo", "222040"),
         ("orchid", "402035"), ("raspberry", "402024"),
+    ],
+    # Pines, mosses, bark and mushrooms.
+    "forest": [
+        ("pine", "0f3429"), ("fern", "153014"), ("moss", "2c4010"), ("bark", "352017"), ("lichen", "292814"),
+        ("spruce", "0d2729"), ("bramble", "291b22"), ("acorn", "2d200d"), ("canopy", "16291c"), ("mushroom", "381f1f"),
+    ],
+    # Fire reds, flame oranges, coal and smoke.
+    "ember": [
+        ("ember", "45140e"), ("flame", "2c1a0a"), ("ash", "292624"), ("coal", "331720"), ("glow", "312a0c"),
+        ("cinder", "2d1013"), ("smoke", "3d3845"), ("brick", "361f17"), ("garnet", "3b1529"), ("sienna", "3b301a"),
+    ],
+    # Northern-lights greens, glacier blues and violets.
+    "aurora": [
+        ("borealis", "10361f"), ("glacier", "0f3840"), ("polar", "1b2544"), ("nebula", "211636"), ("solar", "290a1b"),
+        ("spectre", "21403a"), ("violet", "361036"), ("ice", "212e3b"), ("verdant", "0e2a0c"), ("magenta", "301017"),
+    ],
+    # Sand, terracotta, sage and canyon reds.
+    "desert": [
+        ("sand", "453a1b"), ("terracotta", "2f150c"), ("sage", "30412a"), ("clay", "2c2319"), ("mesa", "301a19"),
+        ("cactus", "172a1f"), ("dune", "43431e"), ("canyon", "2b1219"), ("oasis", "1d4245"), ("twilight", "3a3040"),
+    ],
+    # Plums, raspberries, blueberries and cherries.
+    "berry": [
+        ("plum", "451c44"), ("raspberry", "300d15"), ("blackberry", "151029"), ("currant", "451613"), ("blueberry", "0e182a"),
+        ("cherry", "3a2016"), ("grape", "2a1a32"), ("elderberry", "3b1c33"), ("cranberry", "3a1626"), ("bilberry", "141629"),
+    ],
+    # Fjord blues, frost, pine and birch.
+    "nordic": [
+        ("fjord", "1b2b3b"), ("slate", "20232d"), ("frost", "2d4045"), ("pine", "1f3228"), ("granite", "413a33"),
+        ("aurora", "112e2b"), ("heather", "382d3b"), ("birch", "363429"), ("tundra", "313b29"), ("steel", "2a2740"),
+    ],
+    # Rust, ochre, olive, maroon and pumpkin.
+    "autumn": [
+        ("rust", "31150d"), ("ochre", "29220d"), ("olive", "3c451b"), ("maroon", "3c0c19"), ("pumpkin", "402210"),
+        ("chestnut", "371817"), ("harvest", "3a381d"), ("cider", "41321c"), ("hazel", "2c3921"), ("plum", "2e1e28"),
+    ],
+    # Bright, saturated electric colours. The easiest to tell apart.
+    "neon": [
+        ("cyber", "072230"), ("laser", "41032b"), ("volt", "253d09"), ("ultra", "1a032a"), ("blaze", "351705"),
+        ("acid", "2b2406"), ("electric", "07143a"), ("toxic", "08331c"), ("hot", "3f050d"), ("radium", "06322f"),
+    ],
+    # Deep space blues, nebula pinks and violets.
+    "galaxy": [
+        ("void", "121b35"), ("nebula", "411538"), ("comet", "1a393f"), ("quasar", "1a0829"), ("stardust", "2e1722"),
+        ("orion", "1b3043"), ("pulsar", "173a30"), ("supernova", "41101c"), ("cosmos", "25233a"), ("zenith", "2b1c2d"),
+    ],
+    # Coral, mango, lime, lagoon and hibiscus.
+    "tropical": [
+        ("coral", "3a1215"), ("mango", "352a09"), ("lime", "283410"), ("lagoon", "143b44"), ("hibiscus", "360823"),
+        ("palm", "143c1f"), ("lapis", "0a1f43"), ("orchid", "281530"), ("papaya", "3a1b09"), ("reef", "0b362c"),
     ],
 }
 PALETTE_SIZE = 10                                # every scheme has this many colours
