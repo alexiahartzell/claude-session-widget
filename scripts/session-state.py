@@ -91,11 +91,13 @@ def handle(payload, *, sessions_dir, tint_dir, pid, tty, notify, launch, summari
         if cur is None:
             return None
         fields = {"activity": w.activity_text(payload.get("tool_name"), payload.get("tool_input"))}
+        if payload.get("cwd"):
+            fields["cwd_now"] = payload["cwd"]
         if cur.get("status") == "watching":
             fields.update(status="working", armed=None)   # the watcher fired, Claude resumed
         elif cur.get("status") in ("permission", "needs_input", "idle"):
             fields.update(status="working")               # a new step means Claude is busy again
-        elif fields["activity"] == cur.get("activity"):
+        elif fields["activity"] == cur.get("activity") and fields.get("cwd_now") == cur.get("cwd_now"):
             return None                      # same step again: skip the write
         else:
             # Only the activity line changes. touch=False keeps the card order steady.
@@ -126,6 +128,8 @@ def handle(payload, *, sessions_dir, tint_dir, pid, tty, notify, launch, summari
         color, name = w.read_tint(tint_dir, tty)
         fields.update(color=color, color_name=name)
     fields["source"] = "hook"
+    if payload.get("cwd"):
+        fields["cwd_now"] = payload["cwd"]          # where the session is now, for the project tag
     old, new = w.update_session(sessions_dir, sid, **fields)
 
     was = (old or {}).get("status")

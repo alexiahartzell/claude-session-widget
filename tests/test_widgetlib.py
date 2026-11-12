@@ -598,7 +598,7 @@ def test_subtitle_shows_live_activity_while_working_or_asking():
     s["status"] = "permission"
     assert w.subtitle(s) == "Editing plot.py"
     s["status"] = "needs_input"
-    assert w.subtitle(s) == "fix the plot"
+    assert w.subtitle(s) == "last: Editing plot.py"
     assert w.subtitle({"status": "working", "task": "fix the plot"}) == "fix the plot"
 
 
@@ -665,10 +665,21 @@ def test_clean_summary():
     assert len(w.clean_summary("word " * 40)) <= 70
 
 
-def test_subtitle_prefers_summary_once_claude_stops():
-    s = {"status": "needs_input", "task": "fix it", "summary": "Fixing stuck widget statuses"}
-    assert w.subtitle(s) == "Fixing stuck widget statuses"
-    s.update(status="working", activity="Editing widget.py")
-    assert w.subtitle(s) == "Editing widget.py"
-    s.pop("activity")
-    assert w.subtitle(s) == "Fixing stuck widget statuses"
+def test_summary_becomes_the_headline():
+    s = {"label": "work", "title": "Lib-drop PDF import", "summary": "Fixing stuck widget statuses"}
+    assert w.display_label(s) == "Fixing stuck widget statuses"
+    assert w.display_label(dict(s, label_override="paper")) == "paper"
+
+
+def test_subtitle_names_the_chat_when_the_summary_is_the_headline():
+    s = {"status": "needs_input", "title": "Lib-drop PDF import", "summary": "Fixing stuck widget statuses",
+         "task": "last prompt"}
+    assert w.subtitle(s) == "Lib-drop PDF import"
+    assert w.subtitle({"status": "needs_input", "title": "Lib-drop PDF import", "task": "last prompt"}) == "last prompt"
+
+
+def test_project_follows_where_the_session_is_now():
+    s = {"cwd": "/x/work", "cwd_now": "/x/work/tools/widget", "title": "T"}
+    seen = []
+    w.project_tag(s, name=lambda cwd: seen.append(cwd) or "widget")
+    assert seen == ["/x/work/tools/widget"]

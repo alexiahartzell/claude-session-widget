@@ -105,22 +105,27 @@ def truncate_task(prompt, n=60):
 
 
 def display_label(session):
-    """Manual name, else Claude Code's own AI title for the chat (from the
-    transcript, or from the Terminal tab when no transcript is found), else the folder."""
-    return (session.get("label_override") or session.get("title")
+    """Manual name, else the summary of what the session is doing now, else
+    Claude Code's own title for the chat (from the transcript, or from the
+    Terminal tab when no transcript is found), else the folder."""
+    return (session.get("label_override") or session.get("summary") or session.get("title")
             or session.get("tab_title") or session.get("label") or "?")
 
 
 def subtitle(session):
     """Second line of a row: what Claude is doing right now, what it waits on,
-    your last prompt, or the tab colour."""
+    the last step it took, the chat's title, your last prompt, or the tab colour."""
     task = (session.get("task") or "").strip()
     status = session.get("status")
     if status == "watching" and session.get("armed"):
         return f"waiting on {session['armed']}" + (f" · {task}" if task else "")
-    if status in ("working", "permission") and session.get("activity"):
-        return session["activity"]
-    return session.get("summary") or task or f"{session.get('color_name') or 'grey' } tab"
+    activity = session.get("activity")
+    if activity:
+        return activity if status in ("working", "permission") else f"last: {activity}"
+    chat = session.get("title") or session.get("tab_title")
+    if chat and chat != display_label(session):
+        return chat
+    return task or f"{session.get('color_name') or 'grey' } tab"
 
 
 # ---- Claude's own spinner, read from the Terminal tab title ----
@@ -301,7 +306,7 @@ def project_name(cwd, home=HOME):
 
 def project_tag(session, name=None):
     """Project name for the card, or '' when the card's title already is that name."""
-    tag = (name or project_name)(session.get("cwd") or "")
+    tag = (name or project_name)(session.get("cwd_now") or session.get("cwd") or "")
     return "" if not tag or tag == display_label(session) else tag
 
 

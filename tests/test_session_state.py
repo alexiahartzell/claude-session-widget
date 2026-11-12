@@ -308,3 +308,10 @@ def test_stop_starts_a_summary(tmp_path):
     _armed_session(tmp_path)
     run(tmp_path, {"hook_event_name": "Stop", "session_id": "s1"}, summarise=started.append)
     assert started == ["s1"]
+
+
+def test_hooks_record_the_current_folder(tmp_path):
+    _armed_session(tmp_path)
+    new, _ = run(tmp_path, {"hook_event_name": "PreToolUse", "session_id": "s1", "cwd": "/x/proj/sub",
+                            "tool_name": "Read", "tool_input": {"file_path": "/a/b.md"}})
+    assert new["cwd_now"] == "/x/proj/sub" and new["cwd"] == "/x/proj"
