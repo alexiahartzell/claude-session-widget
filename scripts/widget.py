@@ -34,8 +34,6 @@ PILL_PAD = 9          # space either side of the status word inside its pill
 UPDATE_CHECK_MS = 30000   # how often to look for a newer installed version
 HOVER_MS = 450        # pause before the full-title tooltip appears
 HOVER_POLL_MS = 100   # how often to check where the mouse is (see poll_hover)
-PET_SIZE = 28         # pet size in pixels (drawn from a 24-unit grid)
-PET_MS = 450          # pet animation step
 WORK_FLUSH_S = 30     # how often working time is saved to the daily stats
 MUTE_MIN = 60         # how long a click on the bell mutes banners
 STATUS_WORD = {"working": "working", "needs_input": "needs you", "permission": "permission",
@@ -159,9 +157,6 @@ class Widget:
         self.tip = None
         self.tip_card = None
         self.tip_job = None
-        self.pet = w.pet_kind()     # "dragon", "slime", "wisp", or None when off
-        self.pet_spots = []         # (session id, x, y, status, colours, mark ink, card tag)
-        self.pet_frame = 0
         self.work_s, self.work_longest = {}, {}
         self.work_t = self.work_flushed = time.time()
 
@@ -173,7 +168,6 @@ class Widget:
         self.root.after(100, self.tick)
         self.root.after(PULSE_MS, self.pulse)
         self.root.after(HOVER_POLL_MS, self.poll_hover)
-        self.root.after(PET_MS, self.pet_tick)
         self.root.after(UPDATE_CHECK_MS, self.check_update)
 
     # ---- window position ----
@@ -404,9 +398,8 @@ class Widget:
             self.handle_attention(sessions)
             self.handle_empty(sessions)
             self.mode = w.effective_mode()
-            self.pet = w.pet_kind()
             self.count_work(sessions)
-            key = [self.mode, self.pet, w.mute_until() > time.time() and int(w.mute_until() // 60)] + [(s["session_id"], s.get("status"), w.subtitle(s), w.display_label(s),
+            key = [self.mode, w.mute_until() > time.time() and int(w.mute_until() // 60)] + [(s["session_id"], s.get("status"), w.subtitle(s), w.display_label(s),
                                   s.get("title"), s.get("task"), s.get("activity"), s.get("color"),
                                   w.project_tag(s), w.elapsed_text(s),
                                   w.agents_text(s.get("agents"))) for s in sessions]
@@ -472,7 +465,6 @@ class Widget:
         c.delete("all")
         self.sessions = sessions
         self.pulse_items = []
-        self.pet_spots = []
         head_h = 34
         y = head_h + PAD
         if not sessions:
@@ -524,8 +516,6 @@ class Widget:
         pill_x2 = x2 - 14
         text_x = x1 + 18
         text_w = (pill_x2 - self.pill_w - 12) - text_x
-        if self.pet:
-            text_w -= PET_SIZE + 8
         lines = [self.fit(w.display_label(s), self.f_label, text_w)]   # always one line
         agents = w.agents_text(s.get("agents"))
         h = CARD_H + (LINE_H if agents else 0)
@@ -544,12 +534,6 @@ class Widget:
             c.create_text(text_x, ty + 3 + LINE_H, text=self.fit(agents, self.f_sub, text_w), anchor="w",
                           fill=mix(th["fg"], th["dim"], 0.35), font=self.f_sub, tags=(tag,))
         self.draw_status(s, status, attention, pill_x2, y, h, vivid, card_fill, th, tag)
-        if self.pet:
-            colours = {k: "#" + v for k, v in w.pet_colours(w.accent(color, "dark"), card_fill[1:]).items()}
-            spot = (s["session_id"], pill_x2 - self.pill_w - 8 - PET_SIZE, y + (h - PET_SIZE) / 2,
-                    status, colours, th["fg"], tag)
-            self.pet_spots.append(spot)
-            self.draw_pet(spot)
         if attention:
             self.pulse_items.append((glow, vivid, mix(vivid, card_fill, 0.7)))
         return h
@@ -596,44 +580,6 @@ class Widget:
         if since:
             c.create_text(right - pw / 2, py + PILL_H + 9, text=since, fill=th["dim"],
                           font=self.f_time, tags=(tag,))
-
-    # ---- the pet ----
-    def draw_pet(self, spot):
-        sid, x, y, status, col, ink, tag = spot
-        c, ptag = self.c, "pet:" + sid
-        c.delete(ptag)
-        slow = status in ("idle", "watching")          # sleepy and watchful pets move at half speed
-        frame = self.pet_frame // 2 if slow else self.pet_frame
-        k = PET_SIZE / w.PET_GRID
-        tags = (tag, ptag)
-        for shape in w.pet_shapes(self.pet, status, frame):
-            kind, pts = shape[0], [x + v * k if i % 2 == 0 else y + v * k for i, v in enumerate(shape[1])]
-            if kind == "oval":
-                c.create_oval(*pts, fill=col[shape[2]], outline="", tags=tags)
-            elif kind == "poly":
-                c.create_polygon(*pts, fill=col[shape[2]], outline="", tags=tags)
-            elif kind in ("line", "curve"):
-                c.create_line(*pts, fill=col[shape[2]], width=max(1, shape[3] * k), capstyle="round",
-                              smooth=kind == "curve", tags=tags)
-            elif kind == "ring":
-                c.create_oval(*pts, outline=col[shape[2]], width=max(1, shape[3] * k), tags=tags)
-            elif kind == "arc":
-                c.create_arc(*pts, start=shape[3], extent=shape[4], style="arc", outline=col[shape[2]],
-                             width=max(1, shape[5] * k), tags=tags)
-            elif kind == "mark":
-                c.create_text(*pts, text=shape[2], anchor="nw", fill=ink, font=self.f_status, tags=tags)
-
-    def pet_tick(self):
-        if not self.alive:
-            return
-        try:
-            self.pet_frame += 1
-            if not self.hidden:
-                for spot in self.pet_spots:
-                    self.draw_pet(spot)
-        except Exception as e:
-            log(f"pet: {e!r}")
-        self.root.after(PET_MS, self.pet_tick)
 
     # ---- daily stats ----
     def count_work(self, sessions):

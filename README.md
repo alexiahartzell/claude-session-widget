@@ -40,7 +40,6 @@ Each card is one Claude Code session.
 - **A third line appears while subagents run.** It counts them and lists what each one is doing. Background agents stay listed until they finish.
 - **Hover over a card** to see its full title, the chat's original name, the folder, each running agent, and that session's prompts and working time today.
 - **Hover over the "claude" header** to see today's stats: prompts sent, how long Claude worked, the longest unbroken stretch, and the busiest session.
-- **A small pet sits beside each status.** Pick one of three fantasy starters. **dragon** is a baby dragon that flaps its wings while Claude works and puffs fire when it needs you. **slime** squashes and stretches while Claude works and melts into a puddle asleep. **wisp** is a little flame spirit that flickers while Claude works and blazes up when it needs you. Each takes the card's colour, glances around while Claude watches a background job, and sleeps when idle. Choose with `/session-widget:widget pet slime`, or hide it with `pet off`.
 - **The pill on the right** is the session's status. Under it is how long the session has been in that status, so you can see which one has waited longest.
 
 | Status | Meaning | Card |
@@ -214,7 +213,6 @@ Run these inside any Claude Code session:
 | `/session-widget:widget mute [minutes]` | Silence macOS banners for a while, an hour by default. Cards still pulse. |
 | `/session-widget:widget unmute` | Turn banners back on. |
 | `/session-widget:widget summary on` or `off` | Turn the one-line conversation summaries on or off. |
-| `/session-widget:widget pet dragon`, `slime`, `wisp` or `off` | Choose the pet on each card, or hide it. With no name, it lists the three. |
 
 ---
 
@@ -276,7 +274,6 @@ export CLAUDE_WIDGET_HOME="$HOME/.local/state/claude-widget"
 `config.json` in the state folder holds two settings that the commands change:
 
 - **`summaries`**, true or false, set by `/session-widget:widget summary on` or `off`.
-- **`pet`**, `dragon`, `slime`, `wisp`, or false when off, set by `/session-widget:widget pet`.
 - **`mute_until`**, the time banners come back, set by the mute commands or a click on "mute banners".
 
 ### Where tab colours are stored

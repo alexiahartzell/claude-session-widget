@@ -823,40 +823,6 @@ def test_hover_card_schedules_the_tip_once_per_card():
     assert calls[-1] == "cancel" and fake.tip_card is None
 
 
-# ---- the pet ----
-
-def test_every_pet_draws_every_status_inside_its_box_and_moves():
-    roles = set(w.pet_colours("4466ff", "222233"))
-    for kind in w.PETS:
-        for status in ("working", "watching", "needs_input", "permission", "idle"):
-            frames = [w.pet_shapes(kind, status, f) for f in (0, 1)]
-            assert frames[0] != frames[1], (kind, status)              # it actually moves
-            for shapes in frames:
-                has_eyes = any(sh[0] == "oval" and sh[2] == "dark" for sh in shapes)
-                assert has_eyes or status == "idle", (kind, status)
-                for sh in shapes:
-                    pts = sh[1]
-                    assert all(-0.5 <= v <= w.PET_GRID + 0.5 for v in pts), (kind, status, sh)
-                    if sh[0] != "mark":
-                        assert sh[2] in roles, sh
-    assert w.pet_shapes("dragon", "idle", 0)[-1] == ("mark", (19.5, 3), "z")
-    assert w.pet_shapes("wisp", "permission", 1)[-1][2] == "?"
-
-
-def test_pet_choice_defaults_to_drop_and_saves(tmp_path):
-    cfg = str(tmp_path / "config.json")
-    assert w.pet_kind(cfg) == "dragon" and w.pet_enabled(cfg)
-    w.set_pet("slime", cfg)
-    assert w.pet_kind(cfg) == "slime"
-    w.set_pet("off", cfg)
-    assert w.pet_kind(cfg) is None and not w.pet_enabled(cfg)
-    w._save_config_field(cfg, pet=True)                  # the 1.15.0 setting
-    assert w.pet_kind(cfg) == "dragon"
-    for old in ("drop", "pebble", "kit", "sprout", "cat", "photon", "qubit"):   # earlier pets
-        w._save_config_field(cfg, pet=old)
-        assert w.pet_kind(cfg) == "dragon"
-
-
 # ---- daily stats ----
 
 def test_prompts_and_work_add_up_for_today(tmp_path):

@@ -455,14 +455,3 @@ def test_prompts_are_counted_for_daily_stats(tmp_path):
                    "prompt": "<task-notification>x</task-notification>"})
     day = w.today_stats(str(tmp_path / "stats.json"))
     assert day["prompts"] == 2 and day["by_session"]["s1"]["prompts"] == 2
-
-
-def test_cmd_pet_choose_list_and_off(tmp_path, monkeypatch):
-    cfg = str(tmp_path / "config.json")
-    monkeypatch.setattr(w, "WIDGET_CONFIG", cfg)
-    c = lambda *a: ss.cmd(["pet", *a], sessions_dir=str(tmp_path), widget_dir=str(tmp_path), tty=None)
-    assert "dragon" in c() and "slime" in c() and "wisp" in c()
-    assert c("wisp") == "widget: your pet is now wisp, a little flame wisp" and w.pet_kind(cfg) == "wisp"
-    assert c("off") == "widget: pets off" and w.pet_kind(cfg) is None
-    c("on")
-    assert w.pet_kind(cfg) == "dragon"
