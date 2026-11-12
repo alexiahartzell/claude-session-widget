@@ -943,30 +943,50 @@ def record_prompt(sid, prompt, path=None, now=None):
     return _update_stats(fn, path, now)
 
 
-def add_work(seconds, longest, path=None, now=None):
-    """Add working seconds per session, and keep the longest unbroken stretch."""
-    if not seconds and not longest:
+WAITS_KEPT = 300          # reply times kept per day, for the typical (median) reply
+
+
+def add_activity(work=None, longest=None, waits=(), peak=0, path=None, now=None):
+    """Fold what the panel saw into today's stats.
+    work: {sid: seconds working}. longest: {sid: longest unbroken working stretch}.
+    waits: [(sid, seconds)] for each time Claude needed you, ended by your reply.
+    peak: the most sessions working at once."""
+    work, longest = work or {}, longest or {}
+    if not (work or longest or waits or peak):
         return None
 
     def fn(day):
-        for sid, secs in seconds.items():
+        for sid, secs in work.items():
             day["work_s"] = day.get("work_s", 0) + secs
             b = _by(day, sid)
             b["work_s"] = b.get("work_s", 0) + secs
         for sid, secs in longest.items():
             if secs > day.get("longest_s", 0):
                 day["longest_s"], day["longest_sid"] = secs, sid
+        for sid, secs in waits:
+            day["asks"] = day.get("asks", 0) + 1
+            day["wait_s"] = day.get("wait_s", 0) + secs
+            day["waits"] = (day.get("waits", []) + [round(secs)])[-WAITS_KEPT:]
+            if secs > day.get("longest_wait_s", 0):
+                day["longest_wait_s"], day["longest_wait_sid"] = round(secs), sid
+        if peak > day.get("peak", 0):
+            day["peak"] = peak
     return _update_stats(fn, path, now)
 
 
+def read_stats(path=None):
+    return _read_json(path or STATS_PATH) or {}
+
+
 def today_stats(path=None, now=None):
-    return (_read_json(path or STATS_PATH) or {}).get(today(now), {})
+    return read_stats(path).get(today(now), {})
 
 
 def duration_text(secs):
-    mins = int((secs or 0) // 60)
-    if mins < 1:
-        return "under a minute"
+    secs = secs or 0
+    if secs < 60:
+        return f"{int(secs)} s" if secs >= 1 else "0 s"
+    mins = int(secs // 60)
     if mins < 60:
         return f"{mins} min"
     h, m = divmod(mins, 60)
@@ -977,22 +997,81 @@ def _plural(n, word):
     return f"{n} {word}" + ("" if n == 1 else "s")
 
 
-def stats_lines(day, labels=None):
-    """Lines for the header tooltip. labels maps session id to a card name."""
+def _median(xs):
+    xs = sorted(xs or [])
+    if not xs:
+        return None
+    mid = len(xs) // 2
+    return xs[mid] if len(xs) % 2 else (xs[mid - 1] + xs[mid]) / 2
+
+
+def _sessions(day):
+    return sum(1 for b in (day.get("by_session") or {}).values() if b.get("prompts") or b.get("work_s"))
+
+
+def _active(day):
+    return bool(day.get("prompts") or day.get("work_s") or day.get("asks"))
+
+
+def _week(data, key):
+    """The up-to-seven active days before `key`, newest first."""
+    return [data[k] for k in sorted((k for k in data if k < key), reverse=True) if _active(data[k])][:7]
+
+
+def _avg(days, fn):
+    vals = [v for v in (fn(d) for d in days) if v is not None]
+    return sum(vals) / len(vals) if vals else None
+
+
+def _trend(label, today_v, yday_v, week_v, fmt):
+    parts = [f"{label} {fmt(today_v)}"]
+    if yday_v is not None:
+        parts.append(f"yesterday {fmt(yday_v)}")
+    if week_v is not None:
+        parts.append(f"week avg {fmt(week_v)}")
+    return " · ".join(parts)
+
+
+def stats_lines(data, key=None, labels=None):
+    """Tooltip lines for the header. A line starting with "## " is a section head.
+    data is the whole stats file, key the day to show (today by default)."""
+    key = key or today()
     labels = labels or {}
-    by = day.get("by_session") or {}
-    if not day.get("prompts") and not day.get("work_s"):
+    day = data.get(key, {})
+    if not _active(day):
         return ["today", "nothing yet, a fresh start"]
-    active = [s for s, b in by.items() if b.get("prompts") or b.get("work_s")]
+    name = lambda sid: f" on {labels[sid]}" if sid in labels else ""
     lines = ["today",
-             f"{_plural(day.get('prompts', 0), 'prompt')} across {_plural(len(active), 'session')}",
+             f"{_plural(day.get('prompts', 0), 'prompt')} across {_plural(_sessions(day), 'session')}",
              f"Claude worked {duration_text(day.get('work_s', 0))}"]
     if day.get("longest_s", 0) >= 60:
-        who = labels.get(day.get("longest_sid"))
-        lines.append(f"longest stretch {duration_text(day['longest_s'])}" + (f" on {who}" if who else ""))
-    busiest = max(by, key=lambda s: by[s].get("work_s", 0), default=None)
-    if busiest and labels.get(busiest) and len(active) > 1 and by[busiest].get("work_s", 0) >= 60:
-        lines.append(f"busiest: {labels[busiest]}")
+        lines.append(f"longest stretch {duration_text(day['longest_s'])}{name(day.get('longest_sid'))}")
+    if day.get("peak", 0) > 1:
+        lines.append(f"up to {day['peak']} sessions working at once")
+
+    lines.append("## waiting on you")
+    if day.get("asks"):
+        lines.append(f"Claude needed you {_plural(day['asks'], 'time')}")
+        lines.append(f"typical reply {duration_text(_median(day.get('waits')))}"
+                     f" · longest {duration_text(day.get('longest_wait_s', 0))}{name(day.get('longest_wait_sid'))}")
+        lines.append(f"{duration_text(day.get('wait_s', 0))} in all")
+    else:
+        lines.append("Claude has not had to wait on you")
+
+    yday = data.get(time.strftime("%Y-%m-%d", time.localtime(time.mktime(time.strptime(key, "%Y-%m-%d")) - 43200)))
+    yday = yday if yday and _active(yday) else None
+    week = _week(data, key)
+    if yday or week:
+        lines.append("## trends")
+        get = lambda d, k: (d or {}).get(k, 0) if d else None
+        lines.append(_trend("prompts", day.get("prompts", 0), get(yday, "prompts"),
+                            _avg(week, lambda d: d.get("prompts", 0)), lambda v: str(round(v))))
+        lines.append(_trend("worked", day.get("work_s", 0), get(yday, "work_s"),
+                            _avg(week, lambda d: d.get("work_s", 0)), duration_text))
+        if day.get("waits"):
+            lines.append(_trend("typical reply", _median(day["waits"]),
+                                _median(yday.get("waits")) if yday else None,
+                                _avg(week, lambda d: _median(d.get("waits"))), duration_text))
     return lines
 
 

@@ -158,6 +158,8 @@ class Widget:
         self.tip_card = None
         self.tip_job = None
         self.work_s, self.work_longest = {}, {}
+        self.waits, self.peak = [], 0
+        self.asking = {}            # session id -> when it started needing you
         self.work_t = self.work_flushed = time.time()
 
         self.restore_pos()
@@ -269,7 +271,7 @@ class Widget:
         day = w.today_stats()
         if card == "stats":
             labels = {x["session_id"]: w.display_label(x) for x in self.sessions}
-            self.show_lines(w.stats_lines(day, labels))
+            self.show_lines(w.stats_lines(w.read_stats(), labels=labels))
             return
         s = next((x for x in self.sessions if x["session_id"] == card), None)
         if not s:
@@ -289,7 +291,8 @@ class Widget:
         self.show_lines(lines)
 
     def show_lines(self, lines):
-        """A tooltip beside the panel: the first line bold, the rest dim."""
+        """A tooltip beside the panel: the first line bold, the rest dim.
+        A line starting with "## " is a section head, with a little space above."""
         th = self.theme()
         tip = tk.Toplevel(self.root)
         tip.overrideredirect(True)
@@ -301,6 +304,10 @@ class Widget:
         tk.Label(body, text=lines[0], bg=th["bg"], fg=th["fg"], font=self.f_label,
                  justify="left", wraplength=420).pack(anchor="w")
         for line in lines[1:]:
+            if line.startswith("## "):
+                tk.Label(body, text=line[3:], bg=th["bg"], fg=th["fg"], font=self.f_tag,
+                         justify="left").pack(anchor="w", pady=(6, 0))
+                continue
             tk.Label(body, text=line, bg=th["bg"], fg=th["dim"], font=self.f_sub,
                      justify="left", wraplength=420).pack(anchor="w")
         tip.update_idletasks()
@@ -398,7 +405,7 @@ class Widget:
             self.handle_attention(sessions)
             self.handle_empty(sessions)
             self.mode = w.effective_mode()
-            self.count_work(sessions)
+            self.count_activity(sessions)
             key = [self.mode, w.mute_until() > time.time() and int(w.mute_until() // 60)] + [(s["session_id"], s.get("status"), w.subtitle(s), w.display_label(s),
                                   s.get("title"), s.get("task"), s.get("activity"), s.get("color"),
                                   w.project_tag(s), w.elapsed_text(s),
@@ -582,27 +589,40 @@ class Widget:
                           font=self.f_time, tags=(tag,))
 
     # ---- daily stats ----
-    def count_work(self, sessions):
-        """Add the time since the last tick to every working session."""
+    def count_activity(self, sessions):
+        """Add the time since the last tick to every working session, time each
+        stretch where Claude waits on you, and note how many work at once."""
         now = time.time()
         dt = min(now - self.work_t, 5.0)                # a long gap means the Mac slept
         self.work_t = now
+        working = 0
+        seen = set()
         for s in sessions:
-            if s.get("status") == "working":
-                sid = s["session_id"]
+            sid, status = s["session_id"], s.get("status")
+            seen.add(sid)
+            since = w._num(s.get("status_since") or now)
+            if status == "working":
+                working += 1
                 self.work_s[sid] = self.work_s.get(sid, 0) + dt
-                stretch = now - w._num(s.get("status_since") or now)
-                self.work_longest[sid] = max(self.work_longest.get(sid, 0), stretch)
+                self.work_longest[sid] = max(self.work_longest.get(sid, 0), now - since)
+            if status in w.ATTENTION:
+                self.asking.setdefault(sid, since)
+            elif sid in self.asking:                    # you answered
+                self.waits.append((sid, now - self.asking.pop(sid)))
+        for sid in [x for x in self.asking if x not in seen]:
+            self.waits.append((sid, now - self.asking.pop(sid)))   # the session ended
+        self.peak = max(self.peak, working)
         if now - self.work_flushed >= WORK_FLUSH_S:
             self.flush_work()
 
     def flush_work(self):
         try:
-            w.add_work({k: round(v, 1) for k, v in self.work_s.items()},
-                       {k: round(v) for k, v in self.work_longest.items()})
+            w.add_activity({k: round(v, 1) for k, v in self.work_s.items()},
+                           {k: round(v) for k, v in self.work_longest.items()},
+                           self.waits, self.peak)
         except Exception as e:
             log(f"stats: {e!r}")
-        self.work_s, self.work_longest = {}, {}
+        self.work_s, self.work_longest, self.waits, self.peak = {}, {}, [], 0
         self.work_flushed = time.time()
 
     def pulse(self):

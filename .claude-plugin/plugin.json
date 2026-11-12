@@ -1,6 +1,6 @@
 {
   "name": "session-widget",
-  "version": "1.18.0",
+  "version": "1.19.0",
   "description": "Always-on-top macOS panel listing your live Claude Code sessions, with a matching colour for each Terminal tab. Pulses when one needs you. Click a card to jump to its tab.",
   "author": { "name": "Alexia Hartzell", "url": "https://github.com/alexiahartzell" },
   "homepage": "https://github.com/alexiahartzell/claude-session-widget",

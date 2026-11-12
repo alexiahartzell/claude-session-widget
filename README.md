@@ -39,7 +39,10 @@ Each card is one Claude Code session.
 - **The summary** in the title is written by a small model (Haiku, through your own `claude` command) from your last few prompts. Turn it off with `/widget summary off`.
 - **A third line appears while subagents run.** It counts them and lists what each one is doing. Background agents stay listed until they finish.
 - **Hover over a card** to see its full title, the chat's original name, the folder, each running agent, and that session's prompts and working time today.
-- **Hover over the "claude" header** to see today's stats: prompts sent, how long Claude worked, the longest unbroken stretch, and the busiest session.
+- **Hover over the top bar** to see today's stats in three blocks.
+  - **Today:** prompts sent, sessions used, how long Claude worked, its longest unbroken stretch, and the most sessions working at once.
+  - **Waiting on you:** how many times Claude needed you, your typical (median) reply time, the longest wait and where, and the total.
+  - **Trends:** prompts, working time and typical reply compared with yesterday and your average over the last seven active days.
 - **The pill on the right** is the session's status. Under it is how long the session has been in that status, so you can see which one has waited longest.
 
 | Status | Meaning | Card |
@@ -390,7 +393,7 @@ Everything stays on your Mac, except the summaries.
 - **What it reads:** each session's transcript to find its title and what it is waiting on, the titles of your Terminal tabs, and Claude Code's plugin list to spot updates.
 - **What it changes:** the background and text colour of Terminal tabs running Claude Code, put back when each session ends.
 - **What it stores:** up to six of your latest prompts per session, cut to 300 characters each, plus the summary, the current step and the folder. They live in the state folder, and each file is deleted when its session ends.
-- **Daily stats** keep only counts and seconds per session, never prompt text, in `stats.json` in the state folder. Only the last fourteen days are kept.
+- **Daily stats** keep only counts and seconds per session, never prompt text, in `stats.json` in the state folder. Only the last fourteen days are kept, which is what the seven-day trend needs.
 
 ---
 
