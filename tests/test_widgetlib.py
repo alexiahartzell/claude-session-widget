@@ -863,7 +863,7 @@ def test_stats_lines_read_naturally():
             "2026-11-13": {"prompts": 99}}                      # a later day is ignored
     assert w.stats_lines(data, "2026-11-12", {"a": "Fitting spectra", "b": "Notes"}) == [
         "today",
-        "14 prompts across 2 sessions",
+        "14 prompts, 2 sessions",
         "Claude worked 2 h 10 min",
         "longest stretch 25 min on Fitting spectra",
         "up to 3 sessions working at once",
@@ -879,9 +879,10 @@ def test_stats_lines_read_naturally():
 
 
 def test_stats_lines_first_day_has_no_trends():
-    data = {"2026-11-12": {"prompts": 1, "work_s": 30, "by_session": {"a": {"prompts": 1, "work_s": 30}}}}
+    data = {"2026-11-12": {"prompts": 1, "work_s": 34, "by_session": {"a": {"prompts": 1, "work_s": 30},
+                                                                    "helper": {"work_s": 4}}}}
     assert w.stats_lines(data, "2026-11-12") == [
-        "today", "1 prompt across 1 session", "Claude worked 30 s",
+        "today", "1 prompt, 1 session", "Claude worked 34 s",
         "## waiting on you", "Claude has not had to wait on you"]
 
 

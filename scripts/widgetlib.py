@@ -1006,7 +1006,9 @@ def _median(xs):
 
 
 def _sessions(day):
-    return sum(1 for b in (day.get("by_session") or {}).values() if b.get("prompts") or b.get("work_s"))
+    """Sessions you used today. Brief background runs (no prompt, under a
+    minute of work, such as the summary helper) do not count."""
+    return sum(1 for b in (day.get("by_session") or {}).values() if b.get("prompts") or b.get("work_s", 0) >= 60)
 
 
 def _active(day):
@@ -1042,7 +1044,7 @@ def stats_lines(data, key=None, labels=None):
         return ["today", "nothing yet, a fresh start"]
     name = lambda sid: f" on {labels[sid]}" if sid in labels else ""
     lines = ["today",
-             f"{_plural(day.get('prompts', 0), 'prompt')} across {_plural(_sessions(day), 'session')}",
+             f"{_plural(day.get('prompts', 0), 'prompt')}, {_plural(_sessions(day), 'session')}",
              f"Claude worked {duration_text(day.get('work_s', 0))}"]
     if day.get("longest_s", 0) >= 60:
         lines.append(f"longest stretch {duration_text(day['longest_s'])}{name(day.get('longest_sid'))}")
