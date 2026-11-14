@@ -1024,6 +1024,14 @@ def _mirror_status(rec_status, sid, ours, projects_dir):
     return ("watching" if armed else "idle"), armed, mtime
 
 
+def _background_run(rec):
+    """A `claude -p` job rather than a terminal session: one started through
+    the SDK entry point, or a card summary this plugin runs in its own folder.
+    Claude Code lists these too, named after the folder ("widget-df")."""
+    return (str(rec.get("entrypoint") or "").startswith("sdk")
+            or os.path.realpath(rec.get("cwd") or "/") == os.path.realpath(WIDGET_DIR))
+
+
 def mirror_claude_sessions(claude_dir, sessions_dir, tint_dir=TINT_DIR,
                            alive=is_alive, tty_of=tty_of_pid, projects_dir=CLAUDE_PROJECTS_DIR):
     """Seed/update mirror sessions. Returns sessions that just became needs_input."""
@@ -1039,7 +1047,7 @@ def mirror_claude_sessions(claude_dir, sessions_dir, tint_dir=TINT_DIR,
         if not rec or not rec.get("sessionId") or not rec.get("pid"):
             continue
         pid, sid = rec["pid"], rec["sessionId"]
-        if not alive(pid):
+        if not alive(pid) or _background_run(rec):
             continue
         ours = load_session(sessions_dir, sid)
         if ours is not None and ours.get("source") != "mirror":
