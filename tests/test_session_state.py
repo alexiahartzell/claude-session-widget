@@ -120,11 +120,17 @@ def test_ensure_widget_running_uses_pidfile(tmp_path):
     assert ss.ensure_widget_running(wd, launch=lambda: calls.append(1), alive=lambda p: False) is True
     assert calls == [1]
     (tmp_path / "widget.pid").write_text("123")
-    assert ss.ensure_widget_running(wd, launch=lambda: calls.append(2), alive=lambda p: p == 123) is False
+    assert ss.ensure_widget_running(wd, launch=lambda: calls.append(2), alive=lambda p: p == 123,
+                                    locked=lambda f: True) is False
     assert calls == [1]
     (tmp_path / "widget.pid").write_text("junk")
     assert ss.ensure_widget_running(wd, launch=lambda: calls.append(3), alive=lambda p: False) is True
     assert calls == [1, 3]
+    # the pid now belongs to some other process: nobody holds the lock, so launch
+    (tmp_path / "widget.pid").write_text("123")
+    assert ss.ensure_widget_running(wd, launch=lambda: calls.append(4), alive=lambda p: True,
+                                    locked=lambda f: False) is True
+    assert calls == [1, 3, 4]
 
 
 def test_cmd_name_sets_override_by_tty(tmp_path):

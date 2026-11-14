@@ -35,13 +35,14 @@ def launch_widget():
                      start_new_session=True, env=w.clean_env())
 
 
-def ensure_widget_running(widget_dir, launch=launch_widget, alive=w.is_alive):
+def ensure_widget_running(widget_dir, launch=launch_widget, alive=w.is_alive, locked=w.pid_file_locked):
+    pid_file = os.path.join(widget_dir, "widget.pid")
     try:
-        with open(os.path.join(widget_dir, "widget.pid")) as f:
+        with open(pid_file) as f:
             pid = int(f.read().strip())
     except Exception:
         pid = None
-    if alive(pid):
+    if alive(pid) and locked(pid_file):   # the pid alone may be another program's now
         return False
     launch()
     return True

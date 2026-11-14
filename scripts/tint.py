@@ -280,12 +280,22 @@ def save_state(tty, orig, orig_text, tint, session_id=None):
         json.dump({"orig": orig, "orig_text": orig_text, "tint": tint, "name": NAMES[tint],
                    "session_id": session_id}, f)
 
+def text_for(bg):
+    """A readable text colour on background bg."""
+    return TEXT["light" if w.is_light(bg) else "dark"]
+
 def orig_of(tty, tabs):
-    """The tab's own (background, text colour) from before any tint."""
+    """The tab's own (background, text colour) from before any tint. State
+    left by an older version can lack the text colour; a readable one for the
+    original background then stands in, never nothing."""
     st = load_state(tty)
-    if st:
-        return st["orig"], st.get("orig_text")
-    return (tabs[tty] if tabs[tty] not in NAMES else "000000"), text_of(tty)
+    if st and st.get("orig"):
+        orig = st["orig"]
+        text = st.get("orig_text") or (text_of(tty) if tabs.get(tty) not in NAMES else None)
+    else:
+        orig = tabs[tty] if tabs[tty] not in NAMES else "000000"
+        text = text_of(tty)
+    return orig, text or text_for(orig)
 
 def apply(tty, tabs, choice, session_id=None):
     orig, orig_text = orig_of(tty, tabs)
@@ -312,11 +322,37 @@ def tint_if_needed(tty, tabs, session_id=None):
     return apply(tty, tabs, pick_free(tty, tabs), session_id)
 
 def restore(tty, tabs):
+    """Give the tab its own colours back. A tab already back to its own
+    colours, as after /tint reset, is left alone."""
     st = load_state(tty)
-    orig = st["orig"] if st else "000000"
     if st:
-        os.remove(state_path(tty))
-    set_bg(tty, orig, (st or {}).get("orig_text"))
+        try:
+            os.remove(state_path(tty))
+        except FileNotFoundError:
+            pass
+        orig = st.get("orig") or "000000"
+        set_bg(tty, orig, st.get("orig_text") or text_for(orig))
+    elif tabs.get(tty) in NAMES:
+        set_bg(tty, "000000", text_for("000000"))
+
+def prune_state(tabs):
+    """Forget saved colours for tabs that are closed. A session that crashed or
+    whose tab was closed never ran SessionEnd, and its file would otherwise
+    colour a later session on the same tty."""
+    if not tabs:
+        return                               # Terminal could not be read: keep everything
+    keep = {state_path(t) for t in tabs}
+    try:
+        names = os.listdir(STATE_DIR)
+    except FileNotFoundError:
+        return
+    for n in names:
+        p = os.path.join(STATE_DIR, n)
+        if n.startswith("_dev_") and n.endswith(".json") and p not in keep:
+            try:
+                os.remove(p)
+            except OSError:
+                pass
 
 def recolour_all(tabs, cfg):
     """Give every Claude tab a free colour from the chosen scheme and mode."""
@@ -363,6 +399,7 @@ def main(argv):
                 print(f"{tty}: {tint_if_needed(tty, tabs)}")
         return
 
+    prune_state(tabs)
     tty = tty_of_pid(os.getpid())
     if not tty or tty not in tabs:
         return
