@@ -43,6 +43,7 @@ Each card is one Claude Code session.
   - **Today:** prompts sent, sessions used, how long Claude worked, its longest unbroken stretch, and the most sessions working at once.
   - **Waiting on you:** how many times Claude needed you, your typical (median) reply time, the longest wait and where, and the total.
   - **Trends:** prompts, working time and typical reply compared with yesterday and your average over the last seven active days.
+- **Tooltips open only on the Space that shows the panel.** Resting the mouse where the panel sits on another Space, or over a fullscreen app, does nothing.
 - **The pill on the right** is the session's status. Under it is how long the session has been in that status, so you can see which one has waited longest.
 
 | Status | Meaning | Card |

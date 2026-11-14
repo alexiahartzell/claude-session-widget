@@ -1,4 +1,5 @@
-import json, os, time
+import json, os, subprocess, sys, time
+import pytest
 import widgetlib as w
 
 
@@ -926,3 +927,41 @@ def test_count_activity_times_work_waits_and_parallel_sessions(monkeypatch):
     assert longest == {"a": 700, "b": 12, "c": 1}
     assert waits == [("c", 60.0), ("b", 592.0)] and peak == 2
     assert fake.work_s == {} and fake.asking == {}
+
+
+# ---- on_active_space (issue 11) ----
+
+# These ask the real window server, so they run in a child process: loading
+# CoreGraphics here would start threads before the fork-based tests above.
+def _ask(pid):
+    code = ("import sys; sys.path.insert(0, %r); import widgetlib as w; api = w._window_api(); "
+            "print('none' if not (api and api[0].CGWindowListCopyWindowInfo(17, 0)) "
+            "else w.on_active_space(%d))") % (w.CODE_DIR, pid)
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True).stdout.strip()
+    if out == "none":
+        pytest.skip("no window server here")
+    return out
+
+
+def test_on_active_space_false_for_a_pid_with_no_windows():
+    # pid 1 is launchd, which owns no on-screen windows
+    assert _ask(1) == "False"
+
+
+def test_on_active_space_false_for_a_windowless_process():
+    assert _ask(os.getpid()) == "False"
+
+
+def test_on_active_space_fails_open_when_window_list_is_unavailable(monkeypatch):
+    # if the window server cannot be asked, hover keeps working as before
+    monkeypatch.setattr(w, "_window_api", lambda: None)
+    assert w.on_active_space(os.getpid()) is True
+
+
+def test_on_active_space_fails_open_when_window_list_is_null(monkeypatch):
+    class FakeCG:
+        @staticmethod
+        def CGWindowListCopyWindowInfo(opts, rel):
+            return None
+    monkeypatch.setattr(w, "_window_api", lambda: (FakeCG, None, None))
+    assert w.on_active_space(os.getpid()) is True

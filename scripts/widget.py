@@ -238,7 +238,10 @@ class Widget:
             if not self.hidden and not self.drag:
                 px, py = self.root.winfo_pointerxy()
                 x, y = px - self.c.winfo_rootx(), py - self.c.winfo_rooty()
-                inside = 0 <= x < self.c.winfo_width() and 0 <= y < self.c.winfo_height()
+                # Only on the Space that holds the panel: a tooltip opened from
+                # another Space makes macOS switch Spaces to show it (issue 11).
+                inside = (0 <= x < self.c.winfo_width() and 0 <= y < self.c.winfo_height()
+                          and w.on_active_space(os.getpid()))
                 self.hover_card(self.card_at(x, y) if inside else None)
         except tk.TclError:
             pass

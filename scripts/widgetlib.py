@@ -1,5 +1,5 @@
 """Pure helpers shared by the session hook and the widget. No tkinter here."""
-import fcntl, functools, json, os, re, subprocess, tempfile, time
+import ctypes, fcntl, functools, json, os, re, subprocess, tempfile, time
 
 HOME = os.path.expanduser("~")
 CODE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -581,6 +581,53 @@ def acquire_single_instance(pid_file):
         return None
     f.seek(0); f.truncate(); f.write(str(os.getpid())); f.flush()
     return f
+
+
+@functools.lru_cache(maxsize=1)
+def _window_api():
+    """CoreGraphics and CoreFoundation through ctypes, set up once, plus the
+    kCGWindowOwnerPID key. None where they cannot be loaded."""
+    try:
+        cg = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
+        cf = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
+        cg.CGWindowListCopyWindowInfo.restype = ctypes.c_void_p
+        cg.CGWindowListCopyWindowInfo.argtypes = [ctypes.c_uint32, ctypes.c_uint32]
+        cf.CFArrayGetCount.restype = ctypes.c_long
+        cf.CFArrayGetCount.argtypes = [ctypes.c_void_p]
+        cf.CFArrayGetValueAtIndex.restype = ctypes.c_void_p
+        cf.CFArrayGetValueAtIndex.argtypes = [ctypes.c_void_p, ctypes.c_long]
+        cf.CFDictionaryGetValue.restype = ctypes.c_void_p
+        cf.CFDictionaryGetValue.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        cf.CFNumberGetValue.restype = ctypes.c_bool
+        cf.CFNumberGetValue.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p]
+        cf.CFRelease.argtypes = [ctypes.c_void_p]
+        key = ctypes.c_void_p.in_dll(cg, "kCGWindowOwnerPID").value
+        return cg, cf, key
+    except (OSError, AttributeError, ValueError):
+        return None
+
+
+def on_active_space(pid):
+    """True if a window owned by pid is on screen in the Space the user is looking at.
+    Tk reports a window as shown even while its Space is out of view, so the
+    hover poll asks the window server instead. If the window server cannot be
+    asked, this answers True so hover works as it did before."""
+    api = _window_api()
+    if api is None:
+        return True
+    cg, cf, key = api
+    windows = cg.CGWindowListCopyWindowInfo(1 | 16, 0)   # on screen only, no desktop elements
+    if not windows:
+        return True
+    try:
+        owner = ctypes.c_int()
+        for i in range(cf.CFArrayGetCount(windows)):
+            num = cf.CFDictionaryGetValue(cf.CFArrayGetValueAtIndex(windows, i), key)
+            if num and cf.CFNumberGetValue(num, 9, ctypes.byref(owner)) and owner.value == pid:  # 9 = kCFNumberIntType
+                return True
+        return False
+    finally:
+        cf.CFRelease(windows)
 
 
 PLUGIN_REGISTRY = os.path.join(HOME, ".claude", "plugins", "installed_plugins.json")
