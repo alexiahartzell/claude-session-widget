@@ -1055,3 +1055,20 @@ def test_is_claude_process_reads_the_command_name(monkeypatch):
     w._claude_pids.clear()
     monkeypatch.setattr(w.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": "Safari\n"})())
     assert not w.is_claude_process(4242)
+
+
+def test_mirror_skips_background_claude_runs(tmp_path):
+    # `claude -p` jobs, such as the card summaries this plugin starts, are listed
+    # by Claude Code too, named after their folder ("widget-df"). No card for them.
+    cl, se = tmp_path / "claude", str(tmp_path / "sessions")
+    cl.mkdir()
+    (cl / "51360.json").write_text(json.dumps({
+        "pid": 51360, "sessionId": "sid-bg", "cwd": "/somewhere/else", "status": "busy",
+        "kind": "interactive", "entrypoint": "sdk-cli", "name": "else-ac"}))
+    (cl / "51361.json").write_text(json.dumps({
+        "pid": 51361, "sessionId": "sid-sum", "cwd": w.WIDGET_DIR, "status": "busy", "name": "widget-df"}))
+    _claude_record(cl, 3989, "sid-a", "busy")
+    w.mirror_claude_sessions(str(cl), se, tint_dir=str(tmp_path), alive=lambda p: True, tty_of=lambda p: None)
+    assert w.load_session(se, "sid-bg") is None
+    assert w.load_session(se, "sid-sum") is None
+    assert w.load_session(se, "sid-a") is not None
