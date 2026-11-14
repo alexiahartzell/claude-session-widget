@@ -36,6 +36,7 @@ HOVER_MS = 450        # pause before the full-title tooltip appears
 HOVER_POLL_MS = 100   # how often to check where the mouse is (see poll_hover)
 WORK_FLUSH_S = 30     # how often working time is saved to the daily stats
 MUTE_MIN = 60         # how long a click on the bell mutes banners
+DISPLAY_CHECK_S = 5   # how often to make sure the panel is on a connected display
 STATUS_WORD = {"working": "working", "needs_input": "needs you", "permission": "permission",
                "idle": "idle", "watching": "watching"}
 STATE_FILE = os.path.join(w.WIDGET_DIR, "widget-state.json")
@@ -132,6 +133,7 @@ class Widget:
         self.sessions = []
         self.pulse_items = []       # (item id, bright colour, dim colour)
         self.drag = None
+        self.placed_t = 0
         self.mode = "dark"
 
         def font(size, bold=False, family="Avenir Next"):
@@ -184,10 +186,18 @@ class Widget:
         self.place()
 
     def place(self):
+        self.placed_t = time.time()
+        if self.drag:
+            return                          # a redraw mid-drag would snap it back
         self.root.update_idletasks()
         x, bottom = self.anchor
-        y = max(0, bottom - int(self.c.cget("height")))
-        self.root.geometry(f"{W_PX}x{int(self.c.cget('height'))}+{x}+{y}")
+        h = int(self.c.cget("height"))
+        # Kept on a connected display, so a panel saved on a monitor that is
+        # now unplugged comes back. The saved spot is kept for when it returns.
+        x, y = w.keep_on_screen(x, bottom - h, W_PX, h, w.display_bounds())
+        geo = f"{W_PX}x{h}+{x}+{y}"
+        if geo != self.root.geometry():
+            self.root.geometry(geo)
 
     def save_pos(self):
         self.anchor = (self.root.winfo_x(), self.root.winfo_y() + self.root.winfo_height())
@@ -200,6 +210,7 @@ class Widget:
 
     # ---- mouse ----
     def on_click(self, e):
+        self.hide_tip()                     # a drag would leave it behind
         tags = self.c.gettags("current")
         if "close" in tags:
             self.hide()
@@ -238,10 +249,14 @@ class Widget:
             if not self.hidden and not self.drag:
                 px, py = self.root.winfo_pointerxy()
                 x, y = px - self.c.winfo_rootx(), py - self.c.winfo_rooty()
-                inside = 0 <= x < self.c.winfo_width() and 0 <= y < self.c.winfo_height()
+                # Only on the Space that holds the panel: a tooltip opened from
+                # another Space makes macOS switch Spaces to show it (issue 11).
+                inside = (0 <= x < self.c.winfo_width() and 0 <= y < self.c.winfo_height()
+                          and w.on_active_space(os.getpid()))
                 self.hover_card(self.card_at(x, y) if inside else None)
-        except tk.TclError:
-            pass
+        except Exception as e:              # anything else would stop hover for good
+            if not isinstance(e, tk.TclError):
+                log(f"hover: {e!r}")
         self.root.after(HOVER_POLL_MS, self.poll_hover)
 
     def on_motion(self, e):
@@ -309,11 +324,9 @@ class Widget:
             tk.Label(body, text=line, bg=th["bg"], fg=th["dim"], font=self.f_sub,
                      justify="left", wraplength=420).pack(anchor="w")
         tip.update_idletasks()
-        x = self.root.winfo_x() - tip.winfo_reqwidth() - 8
-        if x < 0:
-            x = self.root.winfo_x() + W_PX + 8
-        y = self.root.winfo_pointery() - tip.winfo_reqheight() // 2
-        tip.geometry(f"+{x}+{max(0, y)}")
+        x, y = w.tip_position(self.root.winfo_x(), W_PX, tip.winfo_reqwidth(), tip.winfo_reqheight(),
+                              self.root.winfo_pointery(), w.display_bounds())
+        tip.geometry(f"+{x}+{y}")
         self.tip = tip
 
     def drag_move(self, e):
@@ -327,6 +340,7 @@ class Widget:
         self.drag = None
         if moved > 4:
             self.save_pos()
+            self.place()                    # onto the display, at the height it has now
         elif self.clicked_card:
             for s in self.sessions:
                 if s["session_id"] == self.clicked_card:
@@ -374,6 +388,7 @@ class Widget:
 
     def hide(self):
         self.hidden = True
+        self.hide_tip()
         self.root.withdraw()
 
     def read_command(self):
@@ -411,6 +426,8 @@ class Widget:
             if key != self.last_key:
                 self.last_key = key
                 self.redraw(sessions)
+            elif time.time() - self.placed_t > DISPLAY_CHECK_S and not self.drag:
+                self.place()                # a display may have come or gone
         except Exception as e:
             log(f"tick: {e!r}")
         self.root.after(POLL_MS, self.tick)
@@ -456,6 +473,7 @@ class Widget:
         if self.empty_since is None:
             self.empty_since = time.time()
         elif time.time() - self.empty_since > EMPTY_HIDE_S and not self.hidden:
+            self.hide_tip()
             self.root.withdraw()
 
     # ---- drawing ----
@@ -639,6 +657,9 @@ def main():
     # Drop macOS malloc debugging switches so osascript children stay quiet in the log.
     for k in [k for k in os.environ if k.startswith("Malloc")]:
         del os.environ[k]
+    if tk.TkVersion < 8.6:
+        log(f"warning: Tk {tk.TkVersion} from {sys.executable} is too old and draws emoji badly; "
+            "put a newer python3 first on your PATH")
     app = Widget()
     app.root.mainloop()
 

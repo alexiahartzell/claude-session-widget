@@ -1,5 +1,5 @@
 """Pure helpers shared by the session hook and the widget. No tkinter here."""
-import fcntl, functools, json, os, re, subprocess, tempfile, time
+import ctypes, fcntl, functools, json, os, re, subprocess, tempfile, time
 
 HOME = os.path.expanduser("~")
 CODE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -570,6 +570,22 @@ def direct_tty(pid, ps=None):
     return "/dev/" + out[1]
 
 
+def pid_file_locked(pid_file):
+    """True while a running panel holds the lock on its pid file. A pid alone
+    can belong to another program after a reboot; the lock cannot."""
+    try:
+        f = open(pid_file)
+    except OSError:
+        return False
+    with f:
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            return True
+        fcntl.flock(f, fcntl.LOCK_UN)
+        return False
+
+
 def acquire_single_instance(pid_file):
     """Lock the pid file for this process. Returns the open handle (keep it), or None if taken."""
     os.makedirs(os.path.dirname(pid_file), exist_ok=True)
@@ -583,24 +599,159 @@ def acquire_single_instance(pid_file):
     return f
 
 
+@functools.lru_cache(maxsize=1)
+def _window_api():
+    """CoreGraphics and CoreFoundation through ctypes, set up once, plus the
+    kCGWindowOwnerPID key. None where they cannot be loaded."""
+    try:
+        cg = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
+        cf = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
+        cg.CGWindowListCopyWindowInfo.restype = ctypes.c_void_p
+        cg.CGWindowListCopyWindowInfo.argtypes = [ctypes.c_uint32, ctypes.c_uint32]
+        cf.CFArrayGetCount.restype = ctypes.c_long
+        cf.CFArrayGetCount.argtypes = [ctypes.c_void_p]
+        cf.CFArrayGetValueAtIndex.restype = ctypes.c_void_p
+        cf.CFArrayGetValueAtIndex.argtypes = [ctypes.c_void_p, ctypes.c_long]
+        cf.CFDictionaryGetValue.restype = ctypes.c_void_p
+        cf.CFDictionaryGetValue.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        cf.CFNumberGetValue.restype = ctypes.c_bool
+        cf.CFNumberGetValue.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p]
+        cf.CFRelease.argtypes = [ctypes.c_void_p]
+        key = ctypes.c_void_p.in_dll(cg, "kCGWindowOwnerPID").value
+        return cg, cf, key
+    except (OSError, AttributeError, ValueError):
+        return None
+
+
+class _Rect(ctypes.Structure):
+    _fields_ = [("x", ctypes.c_double), ("y", ctypes.c_double),
+                ("w", ctypes.c_double), ("h", ctypes.c_double)]
+
+
+def display_bounds():
+    """Each connected display as (x, y, width, height) in the same top-left
+    coordinates Tk uses, the main display first. Empty if unknown."""
+    api = _window_api()
+    if api is None:
+        return []
+    cg = api[0]
+    try:
+        cg.CGDisplayBounds.restype = _Rect
+        cg.CGDisplayBounds.argtypes = [ctypes.c_uint32]
+        cg.CGMainDisplayID.restype = ctypes.c_uint32
+        ids, n = (ctypes.c_uint32 * 16)(), ctypes.c_uint32()
+        if cg.CGGetActiveDisplayList(16, ids, ctypes.byref(n)) != 0:
+            return []
+        main = cg.CGMainDisplayID()
+        order = sorted(ids[:n.value], key=lambda d: d != main)
+        out = []
+        for d in order:
+            r = cg.CGDisplayBounds(d)
+            out.append((int(r.x), int(r.y), int(r.w), int(r.h)))
+        return [b for b in out if b[2] > 0 and b[3] > 0]
+    except (AttributeError, ValueError, OSError):
+        return []
+
+
+def _overlap(x, y, w, h, d):
+    dx, dy, dw, dh = d
+    return max(0, min(x + w, dx + dw) - max(x, dx)) * max(0, min(y + h, dy + dh) - max(y, dy))
+
+
+def _clamp(v, lo, size, span):
+    return max(lo, min(v, lo + span - size)) if size <= span else lo
+
+
+def keep_on_screen(x, y, w, h, displays):
+    """Move a w x h window at (x, y) the least distance that puts it wholly on
+    the display it mostly covers. A window on no display, such as one saved on
+    a monitor that is now unplugged, goes to the main display."""
+    if not displays:
+        return x, y
+    d = max(displays, key=lambda d: _overlap(x, y, w, h, d))
+    if _overlap(x, y, w, h, d) == 0:
+        d = displays[0]
+    dx, dy, dw, dh = d
+    return _clamp(x, dx, w, dw), _clamp(y, dy, h, dh)
+
+
+def tip_position(panel_x, panel_w, tip_w, tip_h, pointer_y, displays, gap=8):
+    """Where a tooltip goes: left of the panel if it fits on that display,
+    otherwise right of it, centred on the pointer and kept on the display."""
+    d = max(displays, key=lambda d: _overlap(panel_x, pointer_y, panel_w, 1, d)) if displays else None
+    left, top, right, bottom = (d[0], d[1], d[0] + d[2], d[1] + d[3]) if d else (0, 0, 10 ** 6, 10 ** 6)
+    x = panel_x - tip_w - gap
+    if x < left:
+        x = panel_x + panel_w + gap
+        if x + tip_w > right:
+            x = max(left, right - tip_w)
+    y = pointer_y - tip_h // 2
+    y = max(top, min(y, bottom - tip_h))
+    return x, y
+
+
+def on_active_space(pid):
+    """True if a window owned by pid is on screen in the Space the user is looking at.
+    Tk reports a window as shown even while its Space is out of view, so the
+    hover poll asks the window server instead. If the window server cannot be
+    asked, this answers True so hover works as it did before."""
+    api = _window_api()
+    if api is None:
+        return True
+    cg, cf, key = api
+    windows = cg.CGWindowListCopyWindowInfo(1 | 16, 0)   # on screen only, no desktop elements
+    if not windows:
+        return True
+    try:
+        owner = ctypes.c_int()
+        for i in range(cf.CFArrayGetCount(windows)):
+            num = cf.CFDictionaryGetValue(cf.CFArrayGetValueAtIndex(windows, i), key)
+            if num and cf.CFNumberGetValue(num, 9, ctypes.byref(owner)) and owner.value == pid:  # 9 = kCFNumberIntType
+                return True
+        return False
+    finally:
+        cf.CFRelease(windows)
+
+
 PLUGIN_REGISTRY = os.path.join(HOME, ".claude", "plugins", "installed_plugins.json")
 
 
+def _version(v):
+    """'1.19.3' as (1, 19, 3), or None."""
+    try:
+        return tuple(int(x) for x in str(v).split("."))
+    except (TypeError, ValueError):
+        return None
+
+
+def _installed_version(scripts_dir):
+    data = _read_json(os.path.join(os.path.dirname(scripts_dir), ".claude-plugin", "plugin.json")) or {}
+    return _version(data.get("version"))
+
+
 def newer_install(registry=PLUGIN_REGISTRY, code_dir=CODE_DIR):
-    """The scripts folder of a different installed copy of this plugin, or None.
+    """The scripts folder of a newer installed copy of this plugin, or None.
     Only a copy running from the plugin cache restarts itself; a development
-    checkout is left alone."""
+    checkout is left alone. Two copies of the same version, from two
+    marketplaces, stay put rather than handing over to each other forever."""
     if os.sep + "cache" + os.sep not in code_dir:
         return None
+    mine = _installed_version(code_dir)
+    best, best_v = None, mine
     data = _read_json(registry) or {}
     for key, entries in (data.get("plugins") or {}).items():
         if not key.startswith("session-widget@") or not entries:
             continue
         path = os.path.join(entries[0].get("installPath") or "", "scripts")
-        if (os.path.isfile(os.path.join(path, "widget.py"))
-                and os.path.realpath(path) != os.path.realpath(code_dir)):
-            return path
-    return None
+        if (not os.path.isfile(os.path.join(path, "widget.py"))
+                or os.path.realpath(path) == os.path.realpath(code_dir)):
+            continue
+        v = _version(entries[0].get("version")) or _installed_version(path)
+        if mine is None and best is None:
+            best, best_v = path, v          # our own version is unknown: take any other copy
+        elif v and (best_v is None or v > best_v):
+            best, best_v = path, v
+    return best
 
 
 def claude_pid_of(pid, ps=None):
@@ -658,10 +809,34 @@ def sort_sessions(sessions):
         key=lambda s: (0 if s.get("status") in ATTENTION else 1, -_num(s.get("updated"))))
 
 
-def is_stale(session, now, alive=is_alive):
-    if not session.get("pid") or not alive(session.get("pid")):
+_claude_pids = {}         # pid -> (checked at, is claude)
+
+
+def is_claude_process(pid, ttl=60):
+    """True if pid is running a program called claude. Cached for ttl seconds,
+    since it starts ps."""
+    now = time.time()
+    hit = _claude_pids.get(pid)
+    if hit and now - hit[0] < ttl:
+        return hit[1]
+    try:
+        out = subprocess.run(["ps", "-o", "comm=", "-p", str(int(pid))],
+                             capture_output=True, text=True, timeout=2).stdout
+        ok = os.path.basename(out.strip()) == "claude"
+    except Exception:
+        ok = False
+    _claude_pids[pid] = (now, ok)
+    return ok
+
+
+def is_stale(session, now, alive=is_alive, is_claude=is_claude_process):
+    """A session is gone when its process is. One quiet for MAX_AGE_S is kept
+    only while its pid still runs Claude, so an idle session left overnight
+    stays, and one whose pid was reused by another program goes."""
+    pid = session.get("pid")
+    if not pid or not alive(pid):
         return True
-    return now - _num(session.get("updated")) > MAX_AGE_S
+    return now - _num(session.get("updated")) > MAX_AGE_S and not is_claude(pid)
 
 
 def _sweep_temp_files(sessions_dir, now):

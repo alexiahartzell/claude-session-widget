@@ -165,3 +165,52 @@ def test_set_finds_a_punctuated_colour(tmp_path, monkeypatch):
     assert painted["/dev/ttys001"][0] == "0f3d17"
     tint.main(["set", "State?!"])
     assert painted["/dev/ttys001"][0] == "122154"
+
+
+# ---- restoring a tab's own colours ----
+
+def _paint(monkeypatch, tmp_path):
+    painted = {}
+    monkeypatch.setattr(tint, "STATE_DIR", str(tmp_path))
+    monkeypatch.setattr(tint, "set_bg", lambda tty, h, text=None: painted.__setitem__(tty, (h, text)))
+    return painted
+
+
+def test_restore_after_old_state_without_text_still_gives_readable_text(monkeypatch, tmp_path):
+    painted = _paint(monkeypatch, tmp_path)
+    (tmp_path / "_dev_ttys001.json").write_text(json.dumps({"orig": "000000", "orig_text": None, "tint": "f0e0e0"}))
+    tint.restore("/dev/ttys001", {"/dev/ttys001": "f0e0e0"})
+    assert painted["/dev/ttys001"] == ("000000", tint.TEXT["dark"])     # light text on black
+
+
+def test_restore_twice_leaves_an_untinted_tab_alone(monkeypatch, tmp_path):
+    painted = _paint(monkeypatch, tmp_path)
+    tint.restore("/dev/ttys001", {"/dev/ttys001": "ffffff"})            # /tint reset, then exit
+    assert painted == {}
+
+
+def test_restore_without_state_still_unpaints_a_tinted_tab_readably(monkeypatch, tmp_path):
+    painted = _paint(monkeypatch, tmp_path)
+    pal = tint.palette("muted", "light")
+    tint.restore("/dev/ttys001", {"/dev/ttys001": pal[0][1]})
+    assert painted["/dev/ttys001"] == ("000000", tint.TEXT["dark"])
+
+
+def test_tinting_over_old_state_without_text_records_a_readable_text(monkeypatch, tmp_path):
+    _paint(monkeypatch, tmp_path)
+    h = tint.palette("muted", "dark")[0][1]
+    (tmp_path / "_dev_ttys001.json").write_text(json.dumps({"orig": "ffffff", "tint": h}))
+    monkeypatch.setattr(tint, "text_of", lambda tty: "123456")
+    tint.apply("/dev/ttys001", {"/dev/ttys001": h}, h, "new-session")
+    saved = json.loads((tmp_path / "_dev_ttys001.json").read_text())
+    assert saved["orig"] == "ffffff" and saved["orig_text"] == tint.TEXT["light"]
+    assert saved["session_id"] == "new-session"
+
+
+def test_state_for_closed_tabs_is_pruned(monkeypatch, tmp_path):
+    _paint(monkeypatch, tmp_path)
+    for n in ("000", "004"):
+        (tmp_path / f"_dev_ttys{n}.json").write_text("{}")
+    (tmp_path / "scheme.json").write_text("{}")
+    tint.prune_state({"/dev/ttys000": "000000"})
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["_dev_ttys000.json", "scheme.json"]

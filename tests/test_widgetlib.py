@@ -1,4 +1,5 @@
-import json, os, time
+import json, os, subprocess, sys, time
+import pytest
 import widgetlib as w
 
 
@@ -157,7 +158,9 @@ def test_is_stale():
     assert not w.is_stale(live, now, alive=lambda p: True)
     assert w.is_stale(live, now, alive=lambda p: False)
     old = {"pid": 1, "updated": now - w.MAX_AGE_S - 1}
-    assert w.is_stale(old, now, alive=lambda p: True)
+    assert w.is_stale(old, now, alive=lambda p: True, is_claude=lambda p: False)
+    # an idle session left overnight stays while its pid is still Claude
+    assert not w.is_stale(old, now, alive=lambda p: True, is_claude=lambda p: True)
     assert w.is_stale({"updated": now}, now, alive=lambda p: True)  # no pid
 
 
@@ -748,6 +751,27 @@ def test_newer_install_found(tmp_path):
     assert w.newer_install(str(reg), str(new)) is None           # already on it
 
 
+def test_two_installs_of_the_same_version_do_not_hand_over_back_and_forth(tmp_path):
+    a = tmp_path / "cache" / "mkt-a" / "session-widget" / "1.19.3" / "scripts"
+    b = tmp_path / "cache" / "mkt-b" / "session-widget" / "1.19.3" / "scripts"
+    for d in (a, b):
+        d.mkdir(parents=True)
+        (d / "widget.py").write_text("")
+        (d.parent / ".claude-plugin").mkdir()
+        (d.parent / ".claude-plugin" / "plugin.json").write_text(json.dumps({"version": "1.19.3"}))
+    reg = tmp_path / "installed_plugins.json"
+    reg.write_text(json.dumps({"plugins": {
+        "session-widget@mkt-a": [{"installPath": str(a.parent), "version": "1.19.3"}],
+        "session-widget@mkt-b": [{"installPath": str(b.parent), "version": "1.19.3"}]}}))
+    assert w.newer_install(str(reg), str(a)) is None
+    assert w.newer_install(str(reg), str(b)) is None
+    (b.parent / ".claude-plugin" / "plugin.json").write_text(json.dumps({"version": "1.20.0"}))
+    reg.write_text(reg.read_text().replace('"1.19.3"}], "session-widget@mkt-b": [{"installPath": "%s", "version": "1.19.3"' % b.parent,
+                                           '"1.19.3"}], "session-widget@mkt-b": [{"installPath": "%s", "version": "1.20.0"' % b.parent))
+    assert w.newer_install(str(reg), str(a)) == str(b)
+    assert w.newer_install(str(reg), str(b)) is None
+
+
 def test_newer_install_ignores_dev_checkouts_and_bad_files(tmp_path):
     new = _install(tmp_path, "2.0.0")
     reg = tmp_path / "installed_plugins.json"
@@ -926,3 +950,108 @@ def test_count_activity_times_work_waits_and_parallel_sessions(monkeypatch):
     assert longest == {"a": 700, "b": 12, "c": 1}
     assert waits == [("c", 60.0), ("b", 592.0)] and peak == 2
     assert fake.work_s == {} and fake.asking == {}
+
+
+# ---- on_active_space (issue 11) ----
+
+# These ask the real window server, so they run in a child process: loading
+# CoreGraphics here would start threads before the fork-based tests above.
+def _ask(pid):
+    code = ("import sys; sys.path.insert(0, %r); import widgetlib as w; api = w._window_api(); "
+            "print('none' if not (api and api[0].CGWindowListCopyWindowInfo(17, 0)) "
+            "else w.on_active_space(%d))") % (w.CODE_DIR, pid)
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True).stdout.strip()
+    if out == "none":
+        pytest.skip("no window server here")
+    return out
+
+
+def test_on_active_space_false_for_a_pid_with_no_windows():
+    # pid 1 is launchd, which owns no on-screen windows
+    assert _ask(1) == "False"
+
+
+def test_on_active_space_false_for_a_windowless_process():
+    assert _ask(os.getpid()) == "False"
+
+
+def test_on_active_space_fails_open_when_window_list_is_unavailable(monkeypatch):
+    # if the window server cannot be asked, hover keeps working as before
+    monkeypatch.setattr(w, "_window_api", lambda: None)
+    assert w.on_active_space(os.getpid()) is True
+
+
+def test_on_active_space_fails_open_when_window_list_is_null(monkeypatch):
+    class FakeCG:
+        @staticmethod
+        def CGWindowListCopyWindowInfo(opts, rel):
+            return None
+    monkeypatch.setattr(w, "_window_api", lambda: (FakeCG, None, None))
+    assert w.on_active_space(os.getpid()) is True
+
+
+# ---- keeping the panel and tooltip on a display ----
+
+MAIN = (0, 0, 1710, 1107)
+LEFT = (-1920, -200, 1920, 1080)      # a second display left of and above the main one
+
+
+def test_keep_on_screen_leaves_a_visible_panel_alone():
+    assert w.keep_on_screen(1300, 600, 380, 300, [MAIN]) == (1300, 600)
+
+
+def test_keep_on_screen_brings_back_a_panel_from_an_unplugged_display():
+    # saved on a display that is no longer connected
+    assert w.keep_on_screen(-1500, 300, 380, 300, [MAIN]) == (0, 300)
+    assert w.keep_on_screen(4000, 3000, 380, 300, [MAIN]) == (1710 - 380, 1107 - 300)
+
+
+def test_keep_on_screen_allows_negative_coordinates_on_a_second_display():
+    assert w.keep_on_screen(-1500, -150, 380, 300, [MAIN, LEFT]) == (-1500, -150)
+
+
+def test_keep_on_screen_pulls_a_half_off_panel_inside_its_display():
+    assert w.keep_on_screen(1600, 1000, 380, 300, [MAIN]) == (1710 - 380, 1107 - 300)
+
+
+def test_keep_on_screen_without_display_info_changes_nothing():
+    assert w.keep_on_screen(-5000, -5000, 380, 300, []) == (-5000, -5000)
+
+
+def test_tip_goes_left_of_the_panel_when_there_is_room():
+    assert w.tip_position(1300, 380, 200, 100, 700, [MAIN]) == (1300 - 200 - 8, 650)
+
+
+def test_tip_goes_right_when_the_panel_sits_at_a_left_edge():
+    # left edge of a display with negative x, where the old "x < 0" test failed
+    assert w.tip_position(-1920, 380, 200, 100, 0, [MAIN, LEFT]) == (-1920 + 380 + 8, -50)
+
+
+def test_tip_stays_inside_the_bottom_of_the_display():
+    x, y = w.tip_position(1300, 380, 200, 600, 1100, [MAIN])
+    assert y == 1107 - 600
+
+
+def test_pid_file_locked_only_while_a_process_holds_it(tmp_path):
+    pid_file = str(tmp_path / "widget.pid")
+    assert not w.pid_file_locked(pid_file)                    # no file
+    (tmp_path / "widget.pid").write_text("123")
+    assert not w.pid_file_locked(pid_file)                    # left behind, nobody holds it
+    code = ("import sys, time; sys.path.insert(0, %r); import widgetlib as w; "
+            "h = w.acquire_single_instance(%r); print('ok', flush=True); time.sleep(5)") % (w.CODE_DIR, pid_file)
+    child = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True)
+    try:
+        assert child.stdout.readline().strip() == "ok"
+        assert w.pid_file_locked(pid_file)
+    finally:
+        child.kill(); child.wait()
+    assert not w.pid_file_locked(pid_file)
+
+
+def test_is_claude_process_reads_the_command_name(monkeypatch):
+    w._claude_pids.clear()
+    monkeypatch.setattr(w.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": "/usr/local/bin/claude\n"})())
+    assert w.is_claude_process(4242)
+    w._claude_pids.clear()
+    monkeypatch.setattr(w.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": "Safari\n"})())
+    assert not w.is_claude_process(4242)
