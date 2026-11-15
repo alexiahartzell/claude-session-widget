@@ -49,9 +49,9 @@ Each card is one Claude Code session.
 | Status | Meaning | Card |
 | --- | --- | --- |
 | **permission** | Claude wants you to approve a tool call. | Pulses, with a macOS banner |
-| **needs you** | Claude finished its turn and is waiting for your reply. | Pulses, with a macOS banner |
+| **needs you** | Claude finished its turn and is waiting for your reply. A job from an earlier turn may still be running, and the card says so. | Pulses, with a macOS banner |
 | **working** | Claude is busy on your last prompt. | Steady |
-| **watching** | Claude is waiting on something it started, in this turn or an earlier one: a background job, a subagent, a timer or a watcher. You can still reply. | Steady |
+| **watching** | Claude ended this turn waiting on something it started in that same turn: a background job, a subagent, a timer or a watcher. You can still reply. If Claude Code reports it has waited on you for a while, the card switches to needs you. | Steady |
 | **idle** | Nothing is happening in this session. | Steady |
 
 Sessions that need you always sort to the top.
