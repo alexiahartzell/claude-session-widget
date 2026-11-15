@@ -1133,8 +1133,11 @@ def test_a_click_after_mute_ran_out_starts_from_now(tmp_path):
 
 def test_mute_label():
     now = _local(14)
-    assert w.mute_label(0, now) == "mute banners"
-    assert w.mute_label(now + 600, now) == "muted until 14:10"
+    assert w.mute_label(0, now) == "banners on"
+    assert w.mute_label(now + 600, now) == "10 min"
+    assert w.mute_label(now + 545, now) == "10 min"          # rounds up: never shows 0 while muted
+    assert w.mute_label(now + 61 * 60, now) == "1 h 1 min"
+    assert w.mute_label(now + 120 * 60, now) == "2 h"
 
 
 # ---- pruning old installed copies ----
