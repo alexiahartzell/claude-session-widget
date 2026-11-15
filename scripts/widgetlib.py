@@ -254,9 +254,12 @@ MUTE_STEP_MIN = 10       # each click on the mute text adds this much
 
 
 def add_mute(minutes=MUTE_STEP_MIN, path=None, now=None):
-    """One click on the mute text: ten more minutes on top of any mute still running."""
+    """The +10 and -10 buttons: move the end of the mute by this many minutes,
+    counting from now when no mute is running. A mute that would end now or
+    earlier is turned off."""
     now = time.time() if now is None else now
-    _save_config_field(path, mute_until=max(mute_until(path), now) + minutes * 60)
+    until = max(mute_until(path), now) + minutes * 60
+    _save_config_field(path, mute_until=until if until > now else 0)
 
 
 def mute_label(until, now=None):

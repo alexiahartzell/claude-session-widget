@@ -1109,6 +1109,20 @@ def test_each_mute_click_adds_ten_minutes(tmp_path):
     assert w.mute_until(cfg) == now + 30 * 60
 
 
+def test_minus_ten_takes_time_off_and_unmutes_at_zero(tmp_path):
+    cfg = str(tmp_path / "config.json")
+    now = _local(14)
+    w.add_mute(path=cfg, now=now)
+    w.add_mute(path=cfg, now=now)
+    w.add_mute(-10, path=cfg, now=now + 60)
+    assert w.mute_until(cfg) == now + 10 * 60
+    w.add_mute(-10, path=cfg, now=now + 60)
+    assert not w.banners_muted(cfg, now=now + 60)
+    assert w.mute_until(cfg) == 0
+    w.add_mute(-10, path=cfg, now=now + 120)        # minus while off stays off
+    assert w.mute_until(cfg) == 0
+
+
 def test_a_click_after_mute_ran_out_starts_from_now(tmp_path):
     cfg = str(tmp_path / "config.json")
     now = _local(14)
