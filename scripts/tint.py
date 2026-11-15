@@ -14,7 +14,8 @@ Manual use (the /tint command):
   tint.py all          tint every tab that has a running claude
   tint.py scheme NAME  switch scheme: muted, jewel, dusk, ocean, colourblind, forest,
                        ember, aurora, desert, berry, nordic, autumn, neon, galaxy, tropical,
-                       green, sunset, synthwave, spectral, candy, dracula, crewtractor
+                       green, sunset, synthwave, spectral, candy, patina, regatta,
+                       botanical, terminal, dracula, crewtractor
   tint.py mode MODE    switch mode: auto (follow macOS), dark, light
 Only acts inside Apple Terminal.
 """
@@ -108,6 +109,26 @@ DARK = {
     "green": [
         ("sage", "4e562d"), ("chartreuse", "39590b"), ("moss", "1e2d09"), ("clover", "0f4f03"), ("lichen", "182616"),
         ("pine", "062706"), ("emerald", "005e23"), ("spruce", "0e2018"), ("jade", "146542"), ("sea green", "0b645c"),
+    ],
+    # Two families only: aged copper and bronze against verdigris teal.
+    "patina": [
+        ("verdigris", "0d2b27"), ("copper", "43281f"), ("oxide", "13534e"), ("malachite", "033d2a"), ("bronze", "312a20"),
+        ("brass", "513b1a"), ("teal", "0b2a30"), ("rust", "491b05"), ("weathered", "395155"), ("umber", "2a1c07"),
+    ],
+    # Two families only: navy and slate blues against gold, brass and sand.
+    "regatta": [
+        ("teak", "2a1b03"), ("navy", "0d1c2d"), ("gold", "523b0e"), ("ink", "060e3b"), ("brass", "332e03"),
+        ("slate", "1d242a"), ("storm", "384153"), ("sand", "494030"), ("ensign", "232a55"), ("rope", "34301a"),
+    ],
+    # Two families only: dusty roses against leaf and sage greens.
+    "botanical": [
+        ("fern", "1b290f"), ("rosehip", "350b0c"), ("ivy", "072a06"), ("lichen", "3f5721"), ("peony", "541635"),
+        ("eucalyptus", "272e20"), ("garnet", "2f0512"), ("dried rose", "291c22"), ("leaf", "184623"), ("dusty rose", "3e1f21"),
+    ],
+    # Old computer screens: green and amber phosphor, cyan teletype and beige boxes.
+    "terminal": [
+        ("phosphor", "155216"), ("teletype", "0e3f3e"), ("vt100", "0b3340"), ("dim amber", "2a1f08"), ("amber", "533312"),
+        ("green screen", "324e3a"), ("matrix", "0a2d0f"), ("bakelite", "2a231d"), ("cursor", "1e2c1b"), ("beige box", "463c1e"),
     ],
     # The Dracula palette (as in the JetBrains Dracula theme), darkened for tab backgrounds.
     "dracula": [

@@ -22,7 +22,8 @@ spec.loader.exec_module(tint)
 # Full-rainbow schemes, then cool themes, then warm ones, then the extras.
 ORDER = ["muted", "jewel", "colourblind", "dusk", "berry", "galaxy", "neon", "nordic", "ocean",
          "aurora", "green", "forest", "desert", "autumn", "ember", "tropical", "sunset",
-         "synthwave", "spectral", "candy", "dracula", "crewtractor"]
+         "synthwave", "spectral", "candy", "patina", "regatta",
+         "botanical", "terminal", "dracula", "crewtractor"]
 assert set(ORDER) == set(tint.DARK), "add new schemes to ORDER"
 
 SCALE = 2                       # draw at twice the size, then shrink, for smooth edges
