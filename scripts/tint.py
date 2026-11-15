@@ -2,7 +2,7 @@
 """Tint Terminal.app tabs a distinct colour per Claude Code session.
 
 Hook use (stdin JSON from Claude Code):
-  SessionStart -> pick a colour no other open tab uses, apply it.
+  SessionStart -> pick a random colour no other open tab uses, apply it.
   SessionEnd   -> restore the tab's original background and text colour.
   Set CLAUDE_WIDGET_TINT=off to turn the hook off.
 
@@ -345,17 +345,14 @@ def apply(tty, tabs, choice, session_id=None):
     tabs[tty] = choice
     return NAMES[choice]
 
-def pick_free(tty, tabs, avoid=None, shuffle=False, palette=None):
+def pick_free(tty, tabs, avoid=None, palette=None):
+    """A random colour from the palette that no other tab uses. When every
+    colour is taken, any colour but `avoid`."""
     palette = palette or current_palette()
     used = {h for t, h in tabs.items() if t != tty}
     free = [h for _, h in palette if h not in used and h != avoid]
-    if free:
-        return random.choice(free) if shuffle else free[0]
-    pool = [h for _, h in palette if h != avoid] or [h for _, h in palette]
-    if shuffle:
-        return random.choice(pool)
-    n = int("".join(ch for ch in tty if ch.isdigit()) or 0)
-    return pool[n % len(pool)]
+    pool = free or [h for _, h in palette if h != avoid] or [h for _, h in palette]
+    return random.choice(pool)
 
 def tint_if_needed(tty, tabs, session_id=None):
     if tabs[tty] in NAMES:
@@ -466,7 +463,7 @@ def main(argv):
             return
 
     if action == "shuffle":
-        print(apply(tty, tabs, pick_free(tty, tabs, avoid=tabs[tty], shuffle=True)))
+        print(apply(tty, tabs, pick_free(tty, tabs, avoid=tabs[tty])))
     elif action == "set":
         # Names can hold spaces and punctuation ("state?!"), which the shell mangles,
         # so match on letters and digits only: "set state property" or "set stateproperty".

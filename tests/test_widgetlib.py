@@ -1072,3 +1072,21 @@ def test_mirror_skips_background_claude_runs(tmp_path):
     assert w.load_session(se, "sid-bg") is None
     assert w.load_session(se, "sid-sum") is None
     assert w.load_session(se, "sid-a") is not None
+
+
+def test_hidden_panel_reappears_for_new_attention(tmp_path):
+    cfg = str(tmp_path / "config.json")
+    assert w.should_reveal_panel(new_attention=True, hidden=True, path=cfg, now=1000)
+
+
+def test_muted_panel_stays_hidden_for_new_attention(tmp_path):
+    cfg = str(tmp_path / "config.json")
+    w.mute_banners(60, path=cfg, now=1000)
+    assert not w.should_reveal_panel(new_attention=True, hidden=True, path=cfg, now=1000)
+    assert w.should_reveal_panel(new_attention=True, hidden=True, path=cfg, now=1000 + 61 * 60)
+
+
+def test_panel_not_revealed_without_new_attention(tmp_path):
+    cfg = str(tmp_path / "config.json")
+    assert not w.should_reveal_panel(new_attention=False, hidden=True, path=cfg, now=1000)
+    assert not w.should_reveal_panel(new_attention=True, hidden=False, path=cfg, now=1000)

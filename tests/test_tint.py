@@ -41,7 +41,16 @@ def test_pick_free_skips_colours_other_tabs_use(tmp_path, monkeypatch):
     monkeypatch.setattr(tint, "STATE_DIR", str(tmp_path))
     pal = tint.palette("jewel", "dark")
     tabs = {"/dev/ttys001": pal[0][1], "/dev/ttys002": "000000"}
-    assert tint.pick_free("/dev/ttys002", tabs, palette=pal) == pal[1][1]
+    for _ in range(50):
+        assert tint.pick_free("/dev/ttys002", tabs, palette=pal) != pal[0][1]
+
+
+def test_pick_free_draws_at_random_not_in_palette_order(tmp_path, monkeypatch):
+    monkeypatch.setattr(tint, "STATE_DIR", str(tmp_path))
+    pal = tint.palette("jewel", "dark")
+    tabs = {"/dev/ttys001": "000000"}
+    picks = {tint.pick_free("/dev/ttys001", tabs, palette=pal) for _ in range(200)}
+    assert len(picks) > 1
 
 
 def _fake_terminal(tmp_path, monkeypatch, tabs, claude):
