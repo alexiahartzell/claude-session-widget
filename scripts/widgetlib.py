@@ -250,6 +250,12 @@ def banners_muted(path=None, now=None):
     return mute_until(path) > (time.time() if now is None else now)
 
 
+def should_reveal_panel(new_attention, hidden, path=None, now=None):
+    """Bring a hidden panel back when a session newly needs attention,
+    unless banners are muted. Mute means no pop-ups of any kind."""
+    return bool(new_attention and hidden and not banners_muted(path, now))
+
+
 # ---- subagents ----
 
 AGENT_TOOLS = ("Agent", "Task")

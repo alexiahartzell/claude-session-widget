@@ -461,7 +461,7 @@ class Widget:
                    if s.get("status") in w.ATTENTION}
         new = current - self.seen_attention
         self.seen_attention = current
-        if new and self.hidden:
+        if w.should_reveal_panel(new, self.hidden):
             self.show()
 
     def handle_empty(self, sessions):

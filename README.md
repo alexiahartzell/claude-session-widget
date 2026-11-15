@@ -56,7 +56,7 @@ Each card is one Claude Code session.
 
 Sessions that need you always sort to the top.
 
-**Mute banners for a while.** Click "mute banners" at the top of the panel to silence macOS banners for an hour, and click again to turn them back on. Cards still pulse. For another length, run `/widget mute 20`, or `/widget unmute`.
+**Mute banners for a while.** Click "mute banners" at the top of the panel to silence macOS banners for an hour, and click again to turn them back on. A hidden panel also stays hidden while muted. Cards still pulse. For another length, run `/widget mute 20`, or `/widget unmute`.
 
 **Updates take effect on their own.** After `claude plugin update`, the panel notices the new version within half a minute and restarts onto it.
 
@@ -222,7 +222,7 @@ Run these inside any Claude Code session:
 | `/session-widget:widget quit` | Close the panel completely. It restarts with your next session. |
 | `/session-widget:widget name <text>` | Give the current session a custom title on its card. |
 | `/session-widget:widget name` | Clear the custom title. |
-| `/session-widget:widget mute [minutes]` | Silence macOS banners for a while, an hour by default. Cards still pulse. |
+| `/session-widget:widget mute [minutes]` | Silence macOS banners for a while, an hour by default. A hidden panel stays hidden too. Cards still pulse. |
 | `/session-widget:widget unmute` | Turn banners back on. |
 | `/session-widget:widget summary on` or `off` | Turn the one-line conversation summaries on or off. |
 
