@@ -56,7 +56,7 @@ Each card is one Claude Code session.
 
 Sessions that need you always sort to the top.
 
-**Mute banners for a while.** The top of the panel has a small − and + with the mute state between them. Each + adds 10 minutes, each − takes 10 off, and the middle counts down the minutes left. It reads "banners on" when nothing is muted. A right-click on it turns banners straight back on. A hidden panel also stays hidden while muted. Cards still pulse. For another length, run `/widget mute 20`, or `/widget unmute`.
+**Mute banners for a while.** The top of the panel reads "mute banners", then a small − and + with the minutes left between them. Each + adds 10 minutes, each − takes 10 off, and the middle counts down. It reads "off" when nothing is muted. A right-click on it turns banners straight back on. A hidden panel also stays hidden while muted. Cards still pulse. For another length, run `/widget mute 20`, or `/widget unmute`.
 
 **Updates take effect on their own.** After `claude plugin update`, the panel notices the new version within half a minute and restarts onto it.
 

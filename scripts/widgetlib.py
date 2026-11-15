@@ -263,10 +263,10 @@ def add_mute(minutes=MUTE_STEP_MIN, path=None, now=None):
 
 
 def mute_label(until, now=None):
-    """The words between the mute buttons: "banners on", or the minutes left."""
+    """The words between the mute buttons: "off", or the minutes left."""
     now = time.time() if now is None else now
     if until <= now:
-        return "banners on"
+        return "off"
     h, m = divmod(-(-int(until - now) // 60), 60)        # minutes left, rounded up
     return " ".join(p for p in (f"{h} h" if h else "", f"{m} min" if m else "") if p)
 

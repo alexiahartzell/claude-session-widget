@@ -378,18 +378,20 @@ class Widget:
             sys.exit(0)
 
     def draw_mute(self, c, th, right, y):
-        """[-] 20 min [+], ending at x = right. The parts never move: the
+        """mute banners [-] 20 min [+], ending at x = right. The parts never move: the
         middle has a fixed width, so a changing count does not shift the buttons."""
         until = w.mute_until()
         muted = until > time.time()
         box, gap = 15, 8
-        mid = max(self.f_time.measure(t) for t in ("banners on", "2 h 50 min"))
+        mid = max(self.f_time.measure(t) for t in ("off", "2 h 50 min"))
         for x2, glyph, tag in ((right, "+", "mute_plus"),
                                (right - box - gap - mid - gap, "\u2212", "mute_minus")):
             rounded(c, x2 - box, y - box / 2, x2, y + box / 2, 4,
                     fill=th["bg"], outline=th["dim"], tags=(tag,))
             c.create_text(x2 - box / 2, y, text=glyph, fill=th["fg"], font=self.f_time, tags=(tag,))
         c.create_text(right - box - gap - mid / 2, y, text=w.mute_label(until),
+                      fill=th["fg"] if muted else th["dim"], font=self.f_time, tags=("mute_label",))
+        c.create_text(right - 2 * box - 3 * gap - mid - gap, y, text="mute banners", anchor="e",
                       fill=th["fg"] if muted else th["dim"], font=self.f_time, tags=("mute_label",))
 
     def quit(self):
