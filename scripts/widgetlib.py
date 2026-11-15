@@ -1,5 +1,5 @@
 """Pure helpers shared by the session hook and the widget. No tkinter here."""
-import ctypes, fcntl, functools, json, os, re, subprocess, tempfile, time
+import ctypes, fcntl, functools, json, os, re, shutil, subprocess, tempfile, time
 
 HOME = os.path.expanduser("~")
 CODE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -248,6 +248,41 @@ def mute_until(path=None):
 
 def banners_muted(path=None, now=None):
     return mute_until(path) > (time.time() if now is None else now)
+
+
+MUTE_STEPS_MIN = (15, 60)       # a click on the mute text walks these, then morning, then off
+MORNING_HOUR = 8
+
+
+def next_morning(now):
+    """08:00 local time, at least two hours from now."""
+    t = time.localtime(now + 2 * 3600)
+    morning = time.mktime((t.tm_year, t.tm_mon, t.tm_mday, MORNING_HOUR, 0, 0, 0, 0, -1))
+    if morning < now + 2 * 3600:
+        t = time.localtime(morning + 24 * 3600)
+        morning = time.mktime((t.tm_year, t.tm_mon, t.tm_mday, MORNING_HOUR, 0, 0, 0, 0, -1))
+    return morning
+
+
+def cycle_mute(path=None, now=None):
+    """One click on the mute text: off, 15 minutes, an hour, until morning, off.
+    Each click moves to the first step that ends later than the current mute,
+    so it also follows on from a typed `/widget mute 30`."""
+    now = time.time() if now is None else now
+    until = max(mute_until(path), now)
+    steps = [now + m * 60 for m in MUTE_STEPS_MIN] + [next_morning(now)]
+    later = [s for s in steps if s > until + 60]
+    _save_config_field(path, mute_until=later[0] if later else 0)
+
+
+def mute_label(until, now=None):
+    """The words on the mute button."""
+    now = time.time() if now is None else now
+    if until <= now:
+        return "mute banners"
+    if until == next_morning(now):
+        return "muted until morning"
+    return "muted until " + time.strftime("%H:%M", time.localtime(until))
 
 
 def should_reveal_panel(new_attention, hidden, path=None, now=None):
@@ -761,6 +796,53 @@ def newer_install(registry=PLUGIN_REGISTRY, code_dir=CODE_DIR):
         elif v and (best_v is None or v > best_v):
             best, best_v = path, v
     return best
+
+
+def code_dirs_in_use(sessions_dir):
+    """The scripts folders that open sessions' hooks run from."""
+    return {s["code_dir"] for s in load_sessions(sessions_dir) if s.get("code_dir")}
+
+
+PRUNE_GRACE_S = 14 * 86400
+
+
+def prune_old_installs(versions_dir, in_use=(), keep=2, now=None):
+    """Delete old copies of this plugin from the plugin cache. Keeps the
+    newest `keep` versions, any copy whose scripts folder is in `in_use`, and
+    any copy installed in the last two weeks, as a session open since then
+    may still run its hooks from it without saying so.
+    Only folders named like a version that hold this plugin are touched, and
+    only inside the plugin cache. Returns the folders removed."""
+    if os.sep + "cache" + os.sep not in versions_dir + os.sep:
+        return []
+    try:
+        names = os.listdir(versions_dir)
+    except OSError:
+        return []
+    ours = []
+    for n in names:
+        path = os.path.join(versions_dir, n)
+        meta = _read_json(os.path.join(path, ".claude-plugin", "plugin.json")) or {}
+        if _version(n) and meta.get("name") == "session-widget" and not os.path.islink(path):
+            ours.append((_version(n), path))
+    ours.sort(reverse=True)
+    busy = {os.path.realpath(p) for p in in_use}
+    now = time.time() if now is None else now
+    removed = []
+    for _, path in ours[keep:]:
+        if os.path.realpath(os.path.join(path, "scripts")) in busy:
+            continue
+        try:
+            if now - os.path.getmtime(path) < PRUNE_GRACE_S:
+                continue
+        except OSError:
+            continue
+        try:
+            shutil.rmtree(path)
+            removed.append(path)
+        except OSError:
+            pass
+    return removed
 
 
 def claude_pid_of(pid, ps=None):

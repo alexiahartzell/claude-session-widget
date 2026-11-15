@@ -166,6 +166,7 @@ def handle(payload, *, sessions_dir, tint_dir, pid, tty, notify, launch, summari
         color, name = w.read_tint(tint_dir, tty)
         fields.update(color=color, color_name=name)
     fields["source"] = "hook"
+    fields["code_dir"] = w.CODE_DIR             # so old installs in use are not pruned
     if payload.get("cwd"):
         fields["cwd_now"] = payload["cwd"]          # where the session is now, for the project tag
     old, new = w.update_session(sessions_dir, sid, **fields)

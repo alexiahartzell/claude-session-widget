@@ -56,7 +56,7 @@ Each card is one Claude Code session.
 
 Sessions that need you always sort to the top.
 
-**Mute banners for a while.** Click "mute banners" at the top of the panel to silence macOS banners for an hour, and click again to turn them back on. A hidden panel also stays hidden while muted. Cards still pulse. For another length, run `/widget mute 20`, or `/widget unmute`.
+**Mute banners for a while.** Click "mute banners" at the top of the panel to silence macOS banners for 15 minutes. Click again for an hour, again for until 8 in the morning, and once more to turn them back on. A hidden panel also stays hidden while muted. Cards still pulse. For another length, run `/widget mute 20`, or `/widget unmute`.
 
 **Updates take effect on their own.** After `claude plugin update`, the panel notices the new version within half a minute and restarts onto it.
 
@@ -376,6 +376,8 @@ Update to the newest version:
 ```
 
 The panel switches to the new version by itself within half a minute. Start new Claude Code sessions to pick up new hooks.
+
+**Old copies are cleared for you.** Claude Code keeps every version it installs. Shortly after the panel starts, it deletes copies older than two weeks, but always keeps the newest two and any an open session still runs from.
 
 Uninstall:
 
