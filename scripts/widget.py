@@ -152,6 +152,8 @@ class Widget:
                            highlightthickness=0, bd=0)
         self.c.pack()
         self.c.bind("<Button-1>", self.on_click)
+        for b in ("<Button-2>", "<Button-3>", "<Control-Button-1>"):   # right-click on a Mac is Button-2
+            self.c.bind(b, self.on_right_click)
         self.c.bind("<B1-Motion>", self.drag_move)
         self.c.bind("<ButtonRelease-1>", self.on_release)
         self.c.bind("<Motion>", self.on_motion)
@@ -222,6 +224,13 @@ class Widget:
             log(f"save_pos: {e!r}")
 
     # ---- mouse ----
+    def on_right_click(self, e):
+        """Right-click on the mute text turns banners back on."""
+        if "mute" in self.c.gettags("current"):
+            w.mute_banners(0)
+            self.last_key = None
+        return "break"
+
     def on_click(self, e):
         self.hide_tip()                     # a drag would leave it behind
         tags = self.c.gettags("current")
@@ -229,7 +238,7 @@ class Widget:
             self.hide()
             return
         if "mute" in tags:
-            w.cycle_mute()
+            w.add_mute()
             self.last_key = None            # redraw the header now
             return
         for t in tags:

@@ -250,29 +250,13 @@ def banners_muted(path=None, now=None):
     return mute_until(path) > (time.time() if now is None else now)
 
 
-MUTE_STEPS_MIN = (15, 60)       # a click on the mute text walks these, then morning, then off
-MORNING_HOUR = 8
+MUTE_STEP_MIN = 10       # each click on the mute text adds this much
 
 
-def next_morning(now):
-    """08:00 local time, at least two hours from now."""
-    t = time.localtime(now + 2 * 3600)
-    morning = time.mktime((t.tm_year, t.tm_mon, t.tm_mday, MORNING_HOUR, 0, 0, 0, 0, -1))
-    if morning < now + 2 * 3600:
-        t = time.localtime(morning + 24 * 3600)
-        morning = time.mktime((t.tm_year, t.tm_mon, t.tm_mday, MORNING_HOUR, 0, 0, 0, 0, -1))
-    return morning
-
-
-def cycle_mute(path=None, now=None):
-    """One click on the mute text: off, 15 minutes, an hour, until morning, off.
-    Each click moves to the first step that ends later than the current mute,
-    so it also follows on from a typed `/widget mute 30`."""
+def add_mute(minutes=MUTE_STEP_MIN, path=None, now=None):
+    """One click on the mute text: ten more minutes on top of any mute still running."""
     now = time.time() if now is None else now
-    until = max(mute_until(path), now)
-    steps = [now + m * 60 for m in MUTE_STEPS_MIN] + [next_morning(now)]
-    later = [s for s in steps if s > until + 60]
-    _save_config_field(path, mute_until=later[0] if later else 0)
+    _save_config_field(path, mute_until=max(mute_until(path), now) + minutes * 60)
 
 
 def mute_label(until, now=None):
@@ -280,8 +264,6 @@ def mute_label(until, now=None):
     now = time.time() if now is None else now
     if until <= now:
         return "mute banners"
-    if until == next_morning(now):
-        return "muted until morning"
     return "muted until " + time.strftime("%H:%M", time.localtime(until))
 
 
