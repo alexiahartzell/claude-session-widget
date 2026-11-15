@@ -14,7 +14,7 @@ Manual use (the /tint command):
   tint.py all          tint every tab that has a running claude
   tint.py scheme NAME  switch scheme: muted, jewel, dusk, ocean, colourblind, forest,
                        ember, aurora, desert, berry, nordic, autumn, neon, galaxy, tropical,
-                       green, dracula, crewtractor
+                       green, sunset, synthwave, spectral, candy, dracula, crewtractor
   tint.py mode MODE    switch mode: auto (follow macOS), dark, light
 Only acts inside Apple Terminal.
 """
@@ -113,6 +113,26 @@ DARK = {
     "dracula": [
         ("dracula", "21222c"), ("foreground", "292929"), ("comment", "23315c"), ("cyan", "054957"), ("green", "044915"),
         ("orange", "522d04"), ("pink", "61053a"), ("purple", "300868"), ("red", "550707"), ("yellow", "404508"),
+    ],
+    # Only sunset sky colours: embers, golds, roses and purples into blue hour and night.
+    "sunset": [
+        ("blue hour", "0a3346"), ("ember", "521005"), ("marigold", "4a3304"), ("peach", "4a2a1c"), ("rose", "4a0a24"),
+        ("magenta", "45073f"), ("dusk", "2e0b4a"), ("palm", "163a12"), ("night", "0a1440"), ("lilac", "3a2a45"),
+    ],
+    # Only retro eighties colours: hot pinks, lasers, chrome and VHS blues.
+    "synthwave": [
+        ("hotpink", "5a0545"), ("laser", "003f4f"), ("grid", "1a0a5c"), ("chrome", "2c2f3d"), ("sunset", "5c1a05"),
+        ("neon", "004a2a"), ("outrun", "4d0018"), ("cassette", "3d3a00"), ("vhs", "10235c"), ("arcade", "4a2a00"),
+    ],
+    # Flame-test and emission-line colours, named after the element that makes them.
+    "spectral": [
+        ("h-alpha", "540404"), ("sodium", "4a3000"), ("mercury", "0d4410"), ("lithium", "52063a"), ("copper", "004a4a"),
+        ("argon", "2c0c54"), ("h-beta", "0a2a55"), ("potassium", "452a50"), ("krypton", "3a3a3a"), ("barium", "3a4400"),
+    ],
+    # Only sweet-shop colours: bubblegum, licorice, mint and tangerine.
+    "candy": [
+        ("bubblegum", "5a1040"), ("licorice", "1a1a1a"), ("lime", "2e4a04"), ("blueberry", "0a1e55"), ("cherry", "500810"),
+        ("grape", "3a0a55"), ("butterscotch", "4d3300"), ("mint", "084a3a"), ("cotton", "42284a"), ("tangerine", "562304"),
     ],
     # The crew tractor meme: farm colours named after what gets yelled at the pond.
     "crewtractor": [
