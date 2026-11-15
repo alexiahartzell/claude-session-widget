@@ -114,13 +114,15 @@ def display_label(session):
 
 def subtitle(session):
     """Second line of a card: what is happening right now. The step Claude is
-    on while it works, what it waits on while watching, and nothing when it is
-    your turn or idle. The title above says what the session is about."""
+    on while it works, what it waits on while watching, any job still running
+    when it is your turn, and nothing otherwise. The title above says what the session is about."""
     status = session.get("status")
     waiting = session.get("armed") or session.get("background")
     if status == "watching" and waiting:
         # Both are true: you can reply, and Claude resumes on its own when it ends.
         return f"your turn · waiting on {waiting}"
+    if status == "needs_input" and waiting:
+        return f"{waiting} still running"
     if status in ("working", "permission"):
         return session.get("activity") or (session.get("task") or "").strip()
     return ""
@@ -159,8 +161,8 @@ def reconcile(session, state, held_s):
     """Fields that bring a card in line with the tab's spinner, or None."""
     status = session.get("status")
     if state == "idle" and held_s >= IDLE_HOLD_S and status == "working":
-        waiting = session.get("armed") or session.get("background")
-        return {"status": "watching"} if waiting else {"status": "needs_input"}
+        # Only a wait set up since the last prompt means Claude carries on alone.
+        return {"status": "watching"} if session.get("armed") else {"status": "needs_input"}
     if state == "busy" and held_s >= BUSY_HOLD_S:
         if status in ("idle", "needs_input", "watching"):
             # Keep "armed": a busy tab while watching can be a blocked Stop resuming the
