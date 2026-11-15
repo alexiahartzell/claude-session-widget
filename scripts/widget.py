@@ -227,7 +227,7 @@ class Widget:
     # ---- mouse ----
     def on_right_click(self, e):
         """Right-click on the mute text turns banners back on."""
-        if {"mute", "mute_plus", "mute_minus"} & set(self.c.gettags("current")):
+        if {"mute_label", "mute_plus", "mute_minus"} & set(self.c.gettags("current")):
             w.mute_banners(0)
             self.last_key = None
         return "break"
@@ -238,7 +238,7 @@ class Widget:
         if "close" in tags:
             self.hide()
             return
-        for tag, minutes in (("mute", MUTE_STEP), ("mute_plus", MUTE_STEP), ("mute_minus", -MUTE_STEP)):
+        for tag, minutes in (("mute_plus", MUTE_STEP), ("mute_minus", -MUTE_STEP)):
             if tag in tags:
                 w.add_mute(minutes)
                 self.last_key = None        # redraw the header now
@@ -377,6 +377,21 @@ class Widget:
             log("another widget is already running; exiting")
             sys.exit(0)
 
+    def draw_mute(self, c, th, right, y):
+        """[-] 20 min [+], ending at x = right. The parts never move: the
+        middle has a fixed width, so a changing count does not shift the buttons."""
+        until = w.mute_until()
+        muted = until > time.time()
+        box, gap = 15, 8
+        mid = max(self.f_time.measure(t) for t in ("banners on", "2 h 50 min"))
+        for x2, glyph, tag in ((right, "+", "mute_plus"),
+                               (right - box - gap - mid - gap, "\u2212", "mute_minus")):
+            rounded(c, x2 - box, y - box / 2, x2, y + box / 2, 4,
+                    fill=th["bg"], outline=th["dim"], tags=(tag,))
+            c.create_text(x2 - box / 2, y, text=glyph, fill=th["fg"], font=self.f_time, tags=(tag,))
+        c.create_text(right - box - gap - mid / 2, y, text=w.mute_label(until),
+                      fill=th["fg"] if muted else th["dim"], font=self.f_time, tags=("mute_label",))
+
     def quit(self):
         self.flush_work()
         try:
@@ -443,7 +458,7 @@ class Widget:
             self.handle_empty(sessions)
             self.mode = w.effective_mode()
             self.count_activity(sessions)
-            key = [self.mode, w.mute_until() > time.time() and int(w.mute_until() // 60)] + [(s["session_id"], s.get("status"), w.subtitle(s), w.display_label(s),
+            key = [self.mode, w.mute_label(w.mute_until())] + [(s["session_id"], s.get("status"), w.subtitle(s), w.display_label(s),
                                   s.get("title"), s.get("task"), s.get("activity"), s.get("color"),
                                   w.project_tag(s), w.elapsed_text(s),
                                   w.agents_text(s.get("agents"))) for s in sessions]
@@ -528,18 +543,7 @@ class Widget:
         c.create_rectangle(RADIUS, 2, W_PX - 160, head_h, fill=th["bg"], outline="", tags=("stats",))
         c.create_text(PAD + 8, head_h / 2, text="claude", anchor="w", fill=th["dim"], font=self.f_title,
                       tags=("stats",))
-        until = w.mute_until()
-        x, y = W_PX - PAD - 30, head_h / 2
-        if until > time.time():
-            # -10  muted until 14:20  +10, laid out right to left
-            for text, tag, ink in (("+10", "mute_plus", th["fg"]),
-                                   (w.mute_label(until), "mute_label", th["fg"]),
-                                   ("\u221210", "mute_minus", th["fg"])):
-                c.create_text(x, y, text=text, anchor="e", fill=ink, font=self.f_time, tags=(tag,))
-                x -= self.f_time.measure(text) + 8
-        else:
-            c.create_text(x, y, text="mute banners +10", anchor="e", fill=th["dim"],
-                          font=self.f_time, tags=("mute",))
+        self.draw_mute(c, th, W_PX - PAD - 30, head_h / 2)
         c.create_text(W_PX - PAD - 8, head_h / 2, text="×", anchor="e", fill=th["dim"],
                       font=self.f_close, tags=("close",))
         self.place()
