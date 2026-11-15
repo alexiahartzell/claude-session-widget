@@ -24,6 +24,7 @@ return out'''
 PULSE_MS = 600
 EMPTY_HIDE_S = 30
 W_PX = 380            # panel width
+MUTE_STEP = 10            # minutes the +10 and -10 buttons add or take off
 PRUNE_DELAY_MS = 30_000   # clear old plugin copies this long after start
 PAD = 10              # inner padding
 CARD_H = 58           # minimum card height
@@ -226,7 +227,7 @@ class Widget:
     # ---- mouse ----
     def on_right_click(self, e):
         """Right-click on the mute text turns banners back on."""
-        if "mute" in self.c.gettags("current"):
+        if {"mute", "mute_plus", "mute_minus"} & set(self.c.gettags("current")):
             w.mute_banners(0)
             self.last_key = None
         return "break"
@@ -237,10 +238,11 @@ class Widget:
         if "close" in tags:
             self.hide()
             return
-        if "mute" in tags:
-            w.add_mute()
-            self.last_key = None            # redraw the header now
-            return
+        for tag, minutes in (("mute", MUTE_STEP), ("mute_plus", MUTE_STEP), ("mute_minus", -MUTE_STEP)):
+            if tag in tags:
+                w.add_mute(minutes)
+                self.last_key = None        # redraw the header now
+                return
         for t in tags:
             if t.startswith("card:"):
                 self.clicked_card = t[5:]
@@ -527,9 +529,17 @@ class Widget:
         c.create_text(PAD + 8, head_h / 2, text="claude", anchor="w", fill=th["dim"], font=self.f_title,
                       tags=("stats",))
         until = w.mute_until()
-        word, ink = w.mute_label(until), th["fg"] if until > time.time() else th["dim"]
-        c.create_text(W_PX - PAD - 30, head_h / 2, text=word, anchor="e", fill=ink,
-                      font=self.f_time, tags=("mute",))
+        x, y = W_PX - PAD - 30, head_h / 2
+        if until > time.time():
+            # -10  muted until 14:20  +10, laid out right to left
+            for text, tag, ink in (("+10", "mute_plus", th["fg"]),
+                                   (w.mute_label(until), "mute_label", th["fg"]),
+                                   ("\u221210", "mute_minus", th["fg"])):
+                c.create_text(x, y, text=text, anchor="e", fill=ink, font=self.f_time, tags=(tag,))
+                x -= self.f_time.measure(text) + 8
+        else:
+            c.create_text(x, y, text="mute banners +10", anchor="e", fill=th["dim"],
+                          font=self.f_time, tags=("mute",))
         c.create_text(W_PX - PAD - 8, head_h / 2, text="×", anchor="e", fill=th["dim"],
                       font=self.f_close, tags=("close",))
         self.place()
