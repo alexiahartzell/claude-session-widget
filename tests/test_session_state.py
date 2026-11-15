@@ -475,3 +475,8 @@ def test_prompts_are_counted_for_daily_stats(tmp_path):
                    "prompt": "<task-notification>x</task-notification>"})
     day = w.today_stats(str(tmp_path / "stats.json"))
     assert day["prompts"] == 2 and day["by_session"]["s1"]["prompts"] == 2
+
+
+def test_hooks_record_which_installed_copy_they_run_from(tmp_path):
+    s, _ = run(tmp_path, {"hook_event_name": "UserPromptSubmit", "session_id": "s1", "prompt": "hi", "cwd": "/x"})
+    assert s["code_dir"] == w.CODE_DIR

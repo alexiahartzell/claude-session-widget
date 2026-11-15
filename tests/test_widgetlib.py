@@ -1090,3 +1090,99 @@ def test_panel_not_revealed_without_new_attention(tmp_path):
     cfg = str(tmp_path / "config.json")
     assert not w.should_reveal_panel(new_attention=False, hidden=True, path=cfg, now=1000)
     assert not w.should_reveal_panel(new_attention=True, hidden=False, path=cfg, now=1000)
+
+
+# ---- the mute button cycles through lengths ----
+
+def _local(h, m=0, day=10):
+    return time.mktime((2026, 11, day, h, m, 0, 0, 0, -1))
+
+
+def test_mute_click_cycles_15_min_hour_morning_off(tmp_path):
+    cfg = str(tmp_path / "config.json")
+    now = _local(14)
+    w.cycle_mute(path=cfg, now=now)
+    assert w.mute_until(cfg) == now + 15 * 60
+    w.cycle_mute(path=cfg, now=now + 5)
+    assert w.mute_until(cfg) == now + 5 + 60 * 60
+    w.cycle_mute(path=cfg, now=now + 10)
+    assert w.mute_until(cfg) == _local(8, day=11)
+    w.cycle_mute(path=cfg, now=now + 15)
+    assert not w.banners_muted(cfg, now=now + 15)
+
+
+def test_mute_click_after_a_typed_mute_moves_to_the_next_longer_step(tmp_path):
+    cfg = str(tmp_path / "config.json")
+    now = _local(14)
+    w.mute_banners(30, path=cfg, now=now)          # /widget mute 30
+    w.cycle_mute(path=cfg, now=now)
+    assert w.mute_until(cfg) == now + 60 * 60
+
+
+def test_morning_is_tomorrow_unless_it_is_still_night(tmp_path):
+    assert w.next_morning(_local(14)) == _local(8, day=11)
+    assert w.next_morning(_local(2)) == _local(8, day=10)
+    assert w.next_morning(_local(7, 30)) == _local(8, day=11)   # under two hours away
+
+
+def test_mute_label():
+    now = _local(14)
+    assert w.mute_label(0, now) == "mute banners"
+    assert w.mute_label(now + 900, now) == "muted until 14:15"
+    assert w.mute_label(_local(8, day=11), now) == "muted until morning"
+
+
+# ---- pruning old installed copies ----
+
+def _cached(root, version):
+    d = root / version
+    (d / "scripts").mkdir(parents=True)
+    (d / "scripts" / "widget.py").write_text("")
+    (d / ".claude-plugin").mkdir()
+    (d / ".claude-plugin" / "plugin.json").write_text(json.dumps({"name": "session-widget", "version": version}))
+    return d
+
+
+def test_prune_keeps_newest_two_and_copies_in_use(tmp_path):
+    root = tmp_path / "cache" / "session-widget" / "session-widget"
+    for v in ("1.3.0", "1.9.0", "1.10.0", "1.20.0", "1.21.0", "1.23.1"):
+        _cached(root, v)
+    (root / "notes").mkdir()                       # not a version: never touched
+    removed = w.prune_old_installs(str(root), in_use={str(root / "1.9.0" / "scripts")},
+                                   now=time.time() + 30 * 86400)
+    assert sorted(os.listdir(root)) == ["1.21.0", "1.23.1", "1.9.0", "notes"]
+    assert sorted(os.path.basename(p) for p in removed) == ["1.10.0", "1.20.0", "1.3.0"]
+
+
+def test_prune_leaves_folders_that_are_not_this_plugin(tmp_path):
+    root = tmp_path / "cache" / "session-widget" / "session-widget"
+    for v in ("1.0.0", "2.0.0", "3.0.0"):
+        _cached(root, v)
+    (root / "1.0.0" / ".claude-plugin" / "plugin.json").write_text(json.dumps({"name": "other"}))
+    w.prune_old_installs(str(root), now=time.time() + 30 * 86400)
+    assert sorted(os.listdir(root)) == ["1.0.0", "2.0.0", "3.0.0"]
+
+
+def test_prune_only_runs_from_the_plugin_cache(tmp_path):
+    root = tmp_path / "dev" / "checkouts"
+    for v in ("1.0.0", "2.0.0", "3.0.0"):
+        _cached(root, v)
+    assert w.prune_old_installs(str(root), now=time.time() + 30 * 86400) == []
+    assert len(os.listdir(root)) == 3
+
+
+def test_live_sessions_name_the_code_they_run(tmp_path):
+    d = str(tmp_path / "sessions")
+    w.write_session(d, {"session_id": "a", "code_dir": "/x/1.9.0/scripts"})
+    w.write_session(d, {"session_id": "b"})
+    assert w.code_dirs_in_use(d) == {"/x/1.9.0/scripts"}
+
+
+def test_prune_keeps_copies_installed_in_the_last_two_weeks(tmp_path):
+    root = tmp_path / "cache" / "session-widget" / "session-widget"
+    for v in ("1.0.0", "2.0.0", "3.0.0", "4.0.0"):
+        _cached(root, v)
+    now = time.time()
+    os.utime(root / "1.0.0", (now - 20 * 86400, now - 20 * 86400))
+    assert [os.path.basename(p) for p in w.prune_old_installs(str(root), now=now)] == ["1.0.0"]
+    assert sorted(os.listdir(root)) == ["2.0.0", "3.0.0", "4.0.0"]

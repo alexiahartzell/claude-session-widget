@@ -24,6 +24,7 @@ return out'''
 PULSE_MS = 600
 EMPTY_HIDE_S = 30
 W_PX = 380            # panel width
+PRUNE_DELAY_MS = 30_000   # clear old plugin copies this long after start
 PAD = 10              # inner padding
 CARD_H = 58           # minimum card height
 LINE_H = 18           # title line height
@@ -35,7 +36,6 @@ UPDATE_CHECK_MS = 30000   # how often to look for a newer installed version
 HOVER_MS = 450        # pause before the full-title tooltip appears
 HOVER_POLL_MS = 100   # how often to check where the mouse is (see poll_hover)
 WORK_FLUSH_S = 30     # how often working time is saved to the daily stats
-MUTE_MIN = 60         # how long a click on the bell mutes banners
 DISPLAY_CHECK_S = 5   # how often to make sure the panel is on a connected display
 STATUS_WORD = {"working": "working", "needs_input": "needs you", "permission": "permission",
                "idle": "idle", "watching": "watching"}
@@ -173,6 +173,19 @@ class Widget:
         self.root.after(PULSE_MS, self.pulse)
         self.root.after(HOVER_POLL_MS, self.poll_hover)
         self.root.after(UPDATE_CHECK_MS, self.check_update)
+        self.root.after(PRUNE_DELAY_MS, self.prune_installs)
+
+    def prune_installs(self):
+        """Clear old copies of the plugin from the cache, off the UI thread."""
+        def work():
+            try:
+                versions = os.path.dirname(os.path.dirname(w.CODE_DIR))
+                in_use = w.code_dirs_in_use(w.SESSIONS_DIR) | {w.CODE_DIR}
+                for path in w.prune_old_installs(versions, in_use):
+                    log(f"removed old install {path}")
+            except Exception as e:
+                log(f"prune: {e!r}")
+        threading.Thread(target=work, daemon=True).start()
 
     # ---- window position ----
     def restore_pos(self):
@@ -216,7 +229,7 @@ class Widget:
             self.hide()
             return
         if "mute" in tags:
-            w.mute_banners(0 if w.banners_muted() else MUTE_MIN)
+            w.cycle_mute()
             self.last_key = None            # redraw the header now
             return
         for t in tags:
@@ -505,10 +518,7 @@ class Widget:
         c.create_text(PAD + 8, head_h / 2, text="claude", anchor="w", fill=th["dim"], font=self.f_title,
                       tags=("stats",))
         until = w.mute_until()
-        if until > time.time():
-            word, ink = "banners muted until " + time.strftime("%H:%M", time.localtime(until)), th["fg"]
-        else:
-            word, ink = "mute banners", th["dim"]
+        word, ink = w.mute_label(until), th["fg"] if until > time.time() else th["dim"]
         c.create_text(W_PX - PAD - 30, head_h / 2, text=word, anchor="e", fill=ink,
                       font=self.f_time, tags=("mute",))
         c.create_text(W_PX - PAD - 8, head_h / 2, text="×", anchor="e", fill=th["dim"],
