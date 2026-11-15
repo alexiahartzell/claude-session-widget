@@ -437,7 +437,7 @@ SCHEME_NAMES = ("muted", "jewel", "dusk", "ocean", "colourblind",
                 "forest", "ember", "aurora", "desert", "berry",
                 "nordic", "autumn", "neon", "galaxy", "tropical",
                 "green", "sunset", "synthwave", "spectral", "candy",
-                "dracula", "crewtractor")
+                "patina", "regatta", "botanical", "terminal", "dracula", "crewtractor")
 MODES = ("auto", "dark", "light")
 
 # Panel colours per mode: background, outline, text, secondary text.
