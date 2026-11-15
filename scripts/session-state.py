@@ -131,11 +131,18 @@ def handle(payload, *, sessions_dir, tint_dir, pid, tty, notify, launch, summari
     elif event == "Stop":
         cur = w.load_session(sessions_dir, sid) or {}
         known, waiting = w.waiting_from_stop(payload)
+        # A turn end is your turn unless Claude set up a wait since the last prompt
+        # (a watcher, timer, background job or agent). Work left over from an
+        # earlier turn, such as a long cluster job, does not hold the card on
+        # "watching": it only shows in the subtitle.
+        armed = cur.get("armed")
         if known:          # the payload lists background work from every turn
-            fields = {"status": "watching" if waiting else "needs_input",
-                      "background": waiting, "armed": None}
+            fields = {"status": "watching" if armed and waiting else "needs_input",
+                      "background": waiting}
+            if not waiting:
+                fields["armed"] = None     # what this turn armed has already ended
         else:              # older Claude Code: fall back to what this turn armed
-            fields = {"status": "watching" if cur.get("armed") else "needs_input"}
+            fields = {"status": "watching" if armed else "needs_input"}
         if cur.get("agents"):              # foreground agents are done once Claude stops
             fields["agents"] = [a for a in w.prune_agents(cur["agents"]) if a.get("bg")]
     elif event == "Notification":
@@ -143,9 +150,8 @@ def handle(payload, *, sessions_dir, tint_dir, pid, tty, notify, launch, summari
         if kind == "permission_prompt":
             fields = {"status": "permission"}
         elif kind == "idle_prompt":
-            cur = w.load_session(sessions_dir, sid) or {}
-            if cur.get("status") == "watching":
-                return None
+            # Claude Code says it has waited on you for a while. Believe it, even
+            # while watching: a background job does not answer Claude's question.
             fields = {"status": "needs_input"}
         else:
             return None

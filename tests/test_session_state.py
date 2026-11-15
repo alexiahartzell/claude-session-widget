@@ -295,14 +295,14 @@ def test_new_prompt_clears_activity(tmp_path):
     assert "activity" not in new
 
 
-def test_idle_notification_ignored_while_watching(tmp_path):
+def test_idle_notification_wins_over_watching(tmp_path):
+    # Claude Code says it has waited on you: that beats any background job.
     _armed_session(tmp_path)
     run(tmp_path, {"hook_event_name": "PostToolUse", "session_id": "s1", "tool_name": "Monitor", "tool_input": {}})
     run(tmp_path, {"hook_event_name": "Stop", "session_id": "s1"})
     new, calls = run(tmp_path, {"hook_event_name": "Notification", "session_id": "s1",
                                 "notification_type": "idle_prompt", "message": "waiting"})
-    assert new is None and calls == []
-    assert w.load_session(str(tmp_path / "sessions"), "s1")["status"] == "watching"
+    assert new["status"] == "needs_input" and len(calls) == 1
 
 
 def test_prompt_clears_armed(tmp_path):
@@ -395,7 +395,18 @@ def _bg(type_="shell", **kw):
     return dict({"id": "b1", "type": type_, "status": "running", "description": "wait on cluster"}, **kw)
 
 
-def test_stop_watches_background_job_from_an_earlier_turn(tmp_path):
+def test_stop_watches_background_job_armed_this_turn(tmp_path):
+    _armed_session(tmp_path)
+    run(tmp_path, {"hook_event_name": "PostToolUse", "session_id": "s1", "tool_name": "Bash",
+                   "tool_input": {"command": "squeue-wait", "run_in_background": True}})
+    new, calls = run(tmp_path, {"hook_event_name": "Stop", "session_id": "s1",
+                                "background_tasks": [_bg()], "session_crons": []})
+    assert new["status"] == "watching" and new["background"] == "a background job" and calls == []
+    assert w.subtitle(new) == "your turn · waiting on a background job"
+
+
+def test_job_from_an_earlier_turn_does_not_hide_your_turn(tmp_path):
+    # A long job started turns ago must not turn every later answer into "watching".
     _armed_session(tmp_path)
     run(tmp_path, {"hook_event_name": "PostToolUse", "session_id": "s1", "tool_name": "Bash",
                    "tool_input": {"command": "squeue-wait", "run_in_background": True}})
@@ -404,8 +415,8 @@ def test_stop_watches_background_job_from_an_earlier_turn(tmp_path):
     assert "armed" not in new
     new, calls = run(tmp_path, {"hook_event_name": "Stop", "session_id": "s1",
                                 "background_tasks": [_bg()], "session_crons": []})
-    assert new["status"] == "watching" and new["background"] == "a background job" and calls == []
-    assert w.subtitle(new) == "your turn · waiting on a background job"
+    assert new["status"] == "needs_input" and new["background"] == "a background job" and len(calls) == 1
+    assert w.subtitle(new) == "a background job still running"
 
 
 def test_stop_with_empty_lists_needs_you_even_if_armed(tmp_path):
@@ -420,6 +431,8 @@ def test_stop_with_empty_lists_needs_you_even_if_armed(tmp_path):
 
 def test_stop_watches_a_scheduled_wakeup(tmp_path):
     _armed_session(tmp_path)
+    run(tmp_path, {"hook_event_name": "PostToolUse", "session_id": "s1", "tool_name": "ScheduleWakeup",
+                   "tool_input": {"delaySeconds": 300}})
     new, _ = run(tmp_path, {"hook_event_name": "Stop", "session_id": "s1", "background_tasks": [],
                             "session_crons": [{"id": "c1", "schedule": "5 * * * *", "recurring": False, "prompt": "go"}]})
     assert new["status"] == "watching" and new["background"] == "a timer"
@@ -440,7 +453,8 @@ def test_background_survives_new_prompts_and_feeds_reconcile(tmp_path):
     d = str(tmp_path / "sessions")
     s = w.load_session(d, "s1")
     assert s["status"] == "working" and s["background"] == "a background job"
-    assert w.reconcile(s, "idle", held_s=10) == {"status": "watching"}
+    assert w.reconcile(s, "idle", held_s=10) == {"status": "needs_input"}   # nothing armed this turn
+    assert w.reconcile(dict(s, armed="a watcher"), "idle", held_s=10) == {"status": "watching"}
 
 
 def test_subagent_stop_refreshes_background(tmp_path):
